@@ -24,12 +24,24 @@ func (r *Repository) Create(u User) error {
 
 func (r *Repository) FindByEmail(email string) (*User, error) {
 	row := r.db.QueryRow(`
-        SELECT id, email, name, password_hash, role_id, is_active 
+        SELECT id, email, name, password_hash, role_id, is_active, 
+               created_at, updated_at, last_password_update, is_email_verified
         FROM users WHERE email = ?
     `, email)
 
 	var u User
-	if err := row.Scan(&u.ID, &u.Email, &u.Name, &u.PasswordHash, &u.RoleID, &u.IsActive); err != nil {
+	if err := row.Scan(
+		&u.ID,
+		&u.Email,
+		&u.Name,
+		&u.PasswordHash,
+		&u.RoleID,
+		&u.IsActive,
+		&u.CreatedAt,
+		&u.UpdatedAt,
+		&u.LastPasswordUpdate,
+		&u.IsEmailVerified,
+	); err != nil {
 		return nil, err
 	}
 
@@ -47,7 +59,8 @@ func (r *Repository) EmailExists(email string) bool {
 
 func (r *Repository) List() ([]User, error) {
 	rows, err := r.db.Query(`
-        SELECT id, email, name, role_id, is_active, created_at 
+        SELECT id, email, name, role_id, is_active, created_at, 
+               updated_at, last_password_update, is_email_verified
         FROM users ORDER BY created_at DESC
     `)
 	if err != nil {
@@ -59,14 +72,20 @@ func (r *Repository) List() ([]User, error) {
 
 	for rows.Next() {
 		var u User
-		rows.Scan(
+		err := rows.Scan(
 			&u.ID,
 			&u.Email,
 			&u.Name,
 			&u.RoleID,
 			&u.IsActive,
 			&u.CreatedAt,
+			&u.UpdatedAt,
+			&u.LastPasswordUpdate,
+			&u.IsEmailVerified,
 		)
+		if err != nil {
+			return nil, err
+		}
 
 		list = append(list, u)
 	}

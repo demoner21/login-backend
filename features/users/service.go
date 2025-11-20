@@ -2,6 +2,7 @@ package users
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
@@ -16,11 +17,23 @@ func NewService(repo *Repository) *Service {
 }
 
 func (s *Service) Register(name, email, password string) error {
+	// Validações básicas
+	if name == "" || email == "" || password == "" {
+		return errors.New("nome, email e senha são obrigatórios")
+	}
+
+	if len(password) < 6 {
+		return errors.New("a senha deve ter pelo menos 6 caracteres")
+	}
+
 	if s.repo.EmailExists(email) {
 		return errors.New("email já cadastrado")
 	}
 
-	hash, _ := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("erro ao gerar hash da senha: %w", err)
+	}
 
 	user := User{
 		ID:           uuid.New().String(),
@@ -28,6 +41,7 @@ func (s *Service) Register(name, email, password string) error {
 		Email:        email,
 		PasswordHash: string(hash),
 		RoleID:       2, // USER
+		IsActive:     true,
 	}
 
 	return s.repo.Create(user)
@@ -49,6 +63,7 @@ func (s *Service) Login(email, password string) (*User, error) {
 
 	s.repo.UpdateLastLogin(user.ID)
 
+	user.PasswordHash = ""
 	return user, nil
 }
 

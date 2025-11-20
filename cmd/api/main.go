@@ -4,10 +4,10 @@ import (
 	"log"
 	"net/http"
 
-	"login-backend/config"
-	"login-backend/internal/features/users"
-	"login-backend/internal/platform/database"
-	httpPlatform "login-backend/internal/platform/http"
+	"loginbackend/config"
+	"loginbackend/features/users"
+	"loginbackend/internal/database"
+	httpPlatform "loginbackend/internal/http"
 )
 
 func main() {
