@@ -1,0 +1,23 @@
+services:
+  duckdb:
+    image: duckdb/duckdb:1.4.2
+    container_name: login-backend-duckdb
+    environment:
+      DUCKDB_DATABASE: ${DUCKDB_DATABASE}
+      DUCKDB_EXTENSIONS: ${DUCKDB_EXTENSIONS}
+    ports:
+      - "${DUCKDB_PORT}:8080"
+    volumes:
+      - duckdb_data:/data
+      - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+    restart: unless-stopped
+    command: |
+      /bin/bash -c "
+        echo '🚀 Inicializando DuckDB...'
+        /duckdb /data/$${DUCKDB_DATABASE} -init /docker-entrypoint-initdb.d/init.sql
+        echo '✅ DuckDB pronto!'
+        tail -f /dev/null
+      "
+
+volumes:
+  duckdb_data:

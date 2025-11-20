@@ -1,0 +1,48 @@
+# Binários para aplicações e comandos
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Arquivos de teste específicos
+*.test
+
+# Arquivos de output
+*.out
+
+# Diretório de dependências vendored
+vendor/
+
+# Diretórios de build
+dist/
+build/
+
+# Arquivos de ambiente
+.env
+.env.local
+
+# IDE/Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Diretório de cobertura de testes
+coverage.txt
+coverage.html
+
+# Go modules
+go.work
+go.work.sum
+
+# Arquivos temporários
+tmp/
+temp/
