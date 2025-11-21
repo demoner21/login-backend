@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"loginbackend/features/shared/models"
 	"loginbackend/pkg/utils"
-	"strconv"
 )
 
 type Service struct {
@@ -77,9 +76,8 @@ func (s *Service) Create(req CreateUserRequest) (*models.User, error) {
 }
 
 // GetByID - Busca usuário por ID
-func (s *Service) GetByID(id int) (*models.User, error) {
-	// Converter int para string (Snowflake ID)
-	userID := strconv.Itoa(id)
+// ✅ CORREÇÃO: Recebe string diretamente
+func (s *Service) GetByID(userID string) (*models.User, error) {
 	user, err := s.repo.FindByID(userID)
 	if err != nil {
 		return nil, fmt.Errorf("erro ao buscar usuário: %w", err)
@@ -108,10 +106,8 @@ func (s *Service) List() ([]models.User, error) {
 }
 
 // Update - Atualiza usuário
-func (s *Service) Update(id int, req UpdateUserRequest) (*models.User, error) {
-	// Converter int para string (Snowflake ID)
-	userID := strconv.Itoa(id)
-
+// ✅ CORREÇÃO: Recebe string diretamente
+func (s *Service) Update(userID string, req UpdateUserRequest) (*models.User, error) {
 	// Buscar usuário existente
 	existing, err := s.repo.FindByID(userID)
 	if err != nil {
@@ -141,8 +137,7 @@ func (s *Service) Update(id int, req UpdateUserRequest) (*models.User, error) {
 }
 
 // Delete - Desativa usuário
-func (s *Service) Delete(id int) error {
-	// Converter int para string (Snowflake ID)
-	userID := strconv.Itoa(id)
+// ✅ CORREÇÃO: Recebe string diretamente
+func (s *Service) Delete(userID string) error {
 	return s.repo.Delete(userID)
 }

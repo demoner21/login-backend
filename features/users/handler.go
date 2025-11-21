@@ -3,7 +3,6 @@ package users
 import (
 	"encoding/json"
 	"net/http"
-	"strconv"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -60,14 +59,8 @@ func (h *Handler) ListUsers(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetUser(w http.ResponseWriter, r *http.Request) {
-	userIDStr := chi.URLParam(r, "id")
-	userID, err := strconv.Atoi(userIDStr)
-	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(Response{Error: "ID inválido"})
-		return
-	}
+	// ✅ CORREÇÃO: ID agora é string (Snowflake ID)
+	userID := chi.URLParam(r, "id")
 
 	user, err := h.service.GetByID(userID)
 	if err != nil {
@@ -82,14 +75,8 @@ func (h *Handler) GetUser(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
-	userIDStr := chi.URLParam(r, "id")
-	userID, err := strconv.Atoi(userIDStr)
-	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(Response{Error: "ID inválido"})
-		return
-	}
+	// ✅ CORREÇÃO: ID agora é string (Snowflake ID)
+	userID := chi.URLParam(r, "id")
 
 	var req UpdateUserRequest
 
@@ -114,14 +101,8 @@ func (h *Handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) DeleteUser(w http.ResponseWriter, r *http.Request) {
-	userIDStr := chi.URLParam(r, "id")
-	userID, err := strconv.Atoi(userIDStr)
-	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(Response{Error: "ID inválido"})
-		return
-	}
+	// ✅ CORREÇÃO: ID agora é string (Snowflake ID)
+	userID := chi.URLParam(r, "id")
 
 	if err := h.service.Delete(userID); err != nil {
 		w.Header().Set("Content-Type", "application/json")
