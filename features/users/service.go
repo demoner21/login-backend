@@ -3,9 +3,8 @@ package users
 import (
 	"errors"
 	"fmt"
-
-	"github.com/google/uuid"
-	"golang.org/x/crypto/bcrypt"
+	"loginbackend/features/shared/models"
+	"loginbackend/pkg/utils"
 )
 
 type Service struct {
@@ -13,60 +12,125 @@ type Service struct {
 }
 
 func NewService(repo *Repository) *Service {
-	return &Service{repo}
+	return &Service{repo: repo}
 }
 
-func (s *Service) Register(name, email, password string) error {
+// Create - Cria usuário (sem lógica de login/sessão)
+func (s *Service) Create(req CreateUserRequest) (*models.User, error) {
 	// Validações básicas
-	if name == "" || email == "" || password == "" {
-		return errors.New("nome, email e senha são obrigatórios")
+	if req.Name == "" || req.Email == "" || req.Password == "" {
+		return nil, errors.New("nome, email e senha são obrigatórios")
 	}
 
-	if len(password) < 6 {
-		return errors.New("a senha deve ter pelo menos 6 caracteres")
+	if len(req.Password) < 6 {
+		return nil, errors.New("a senha deve ter pelo menos 6 caracteres")
 	}
 
-	if s.repo.EmailExists(email) {
-		return errors.New("email já cadastrado")
-	}
-
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	// Verificar se email já existe
+	exists, err := s.repo.EmailExists(req.Email)
 	if err != nil {
-		return fmt.Errorf("erro ao gerar hash da senha: %w", err)
+		return nil, fmt.Errorf("erro ao verificar email: %w", err)
+	}
+	if exists {
+		return nil, errors.New("email já cadastrado")
 	}
 
-	user := User{
-		ID:           uuid.New().String(),
-		Name:         name,
-		Email:        email,
-		PasswordHash: string(hash),
-		RoleID:       2, // USER
+	// Hash da senha
+	hash, err := utils.HashPassword(req.Password)
+	if err != nil {
+		return nil, fmt.Errorf("erro ao gerar hash da senha: %w", err)
+	}
+
+	// Definir role padrão se não especificada
+	roleID := req.RoleID
+	if roleID == 0 {
+		roleID = 2 // USER
+	}
+
+	// Criar usuário
+	user := models.User{
+		Name:         req.Name,
+		Email:        req.Email,
+		PasswordHash: hash,
+		RoleID:       roleID,
 		IsActive:     true,
 	}
 
-	return s.repo.Create(user)
+	if err := s.repo.Create(user); err != nil {
+		return nil, fmt.Errorf("erro ao criar usuário: %w", err)
+	}
+
+	// Buscar usuário criado para retornar com ID
+	createdUser, err := s.repo.FindByEmail(user.Email)
+	if err != nil {
+		return nil, fmt.Errorf("erro ao buscar usuário criado: %w", err)
+	}
+
+	// Retornar usuário sem password hash
+	createdUser.PasswordHash = ""
+	return createdUser, nil
 }
 
-func (s *Service) Login(email, password string) (*User, error) {
-	user, err := s.repo.FindByEmail(email)
+// GetByID - Busca usuário por ID
+func (s *Service) GetByID(id int) (*models.User, error) {
+	user, err := s.repo.FindByID(id)
 	if err != nil {
-		return nil, errors.New("credenciais inválidas")
+		return nil, fmt.Errorf("erro ao buscar usuário: %w", err)
 	}
-
-	if !user.IsActive {
-		return nil, errors.New("usuário inativo")
+	if user == nil {
+		return nil, errors.New("usuário não encontrado")
 	}
-
-	if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)) != nil {
-		return nil, errors.New("senha incorreta")
-	}
-
-	s.repo.UpdateLastLogin(user.ID)
 
 	user.PasswordHash = ""
 	return user, nil
 }
 
-func (s *Service) ListUsers() ([]User, error) {
-	return s.repo.List()
+// List - Lista todos os usuários
+func (s *Service) List() ([]models.User, error) {
+	users, err := s.repo.List()
+	if err != nil {
+		return nil, fmt.Errorf("erro ao listar usuários: %w", err)
+	}
+
+	// Remover password hash de todos os usuários
+	for i := range users {
+		users[i].PasswordHash = ""
+	}
+
+	return users, nil
+}
+
+// Update - Atualiza usuário
+func (s *Service) Update(id int, req UpdateUserRequest) (*models.User, error) {
+	// Buscar usuário existente
+	existing, err := s.repo.FindByID(id)
+	if err != nil {
+		return nil, fmt.Errorf("erro ao buscar usuário: %w", err)
+	}
+	if existing == nil {
+		return nil, errors.New("usuário não encontrado")
+	}
+
+	// Aplicar updates
+	if req.Name != nil {
+		existing.Name = *req.Name
+	}
+	if req.Email != nil {
+		existing.Email = *req.Email
+	}
+	if req.RoleID != nil {
+		existing.RoleID = *req.RoleID
+	}
+
+	if err := s.repo.Update(*existing); err != nil {
+		return nil, fmt.Errorf("erro ao atualizar usuário: %w", err)
+	}
+
+	existing.PasswordHash = ""
+	return existing, nil
+}
+
+// Delete - Desativa usuário
+func (s *Service) Delete(id int) error {
+	return s.repo.Delete(id)
 }

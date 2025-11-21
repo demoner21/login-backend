@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS roles (
 
 -- Tabela de usuários (core)
 CREATE TABLE IF NOT EXISTS users (
-    id UUID PRIMARY KEY,
+    id INTEGER PRIMARY KEY, -- substituição do UUID
     email VARCHAR(255) NOT NULL UNIQUE,
     name VARCHAR(255) NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
@@ -26,16 +26,16 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at TIMESTAMP DEFAULT current_timestamp,
     last_login_at TIMESTAMP,
     is_active BOOLEAN DEFAULT true,
-    
+
     FOREIGN KEY (role_id) REFERENCES roles(id)
 );
 
--- Inserir roles básicos (apenas 2 como solicitado) - usar INSERT OR IGNORE
+-- Inserir roles básicos (apenas 2 como solicitado)
 INSERT OR IGNORE INTO roles (id, role_name, description) VALUES
     (1, 'SUPER_ADMIN', 'Acesso total ao sistema'),
     (2, 'USER', 'Usuário padrão do sistema');
 
--- Criar índices para performance (se não existirem)
+-- Criar índices
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_role_id ON users(role_id);
 CREATE INDEX IF NOT EXISTS idx_users_is_active ON users(is_active);

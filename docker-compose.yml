@@ -12,7 +12,7 @@ services:
       - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
     restart: unless-stopped
     command: |
-      /bin/bash -c "
+      /bin/sh -c "
         echo '🚀 Inicializando DuckDB...'
         echo '📁 Database: $${DUCKDB_DATABASE}'
         /duckdb /data/$${DUCKDB_DATABASE} -init /docker-entrypoint-initdb.d/init.sql
