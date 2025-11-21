@@ -8,8 +8,12 @@ import (
 )
 
 type Config struct {
-	DuckDBPath     string
-	DuckDBDatabase string
+	PostgresHost     string
+	PostgresPort     string
+	PostgresUser     string
+	PostgresPassword string
+	PostgresDB       string
+	PostgresSSLMode  string
 }
 
 func Load() Config {
@@ -18,20 +22,28 @@ func Load() Config {
 		log.Printf("⚠️ Arquivo .env não encontrado, usando variáveis de ambiente do sistema")
 	}
 
-	dbName := os.Getenv("DUCKDB_DATABASE")
-	if dbName == "" {
-		log.Fatal("❌ DUCKDB_DATABASE não configurado. Configure no arquivo .env ou variáveis de ambiente")
-	}
-
-	// Criar diretório data se não existir
-	if err := os.MkdirAll("./data", 0755); err != nil {
-		log.Fatalf("❌ Erro ao criar diretório data: %v", err)
-	}
-
-	log.Printf("✅ Banco de dados: %s", dbName)
-
 	return Config{
-		DuckDBPath:     "./data/" + dbName,
-		DuckDBDatabase: dbName,
+		PostgresHost:     getEnv("POSTGRES_HOST", "localhost"),
+		PostgresPort:     getEnv("POSTGRES_PORT", "5432"),
+		PostgresUser:     getEnv("POSTGRES_USER", "admin"),
+		PostgresPassword: getEnv("POSTGRES_PASSWORD", "password"),
+		PostgresDB:       getEnv("POSTGRES_DB", "appdb"),
+		PostgresSSLMode:  getEnv("POSTGRES_SSLMODE", "disable"),
 	}
+}
+
+func (c Config) GetConnectionString() string {
+	return "host=" + c.PostgresHost +
+		" port=" + c.PostgresPort +
+		" user=" + c.PostgresUser +
+		" password=" + c.PostgresPassword +
+		" dbname=" + c.PostgresDB +
+		" sslmode=" + c.PostgresSSLMode
+}
+
+func getEnv(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
 }

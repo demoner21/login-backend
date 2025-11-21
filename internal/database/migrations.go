@@ -32,7 +32,7 @@ func RunMigrations(db *sql.DB, migrationPath string) error {
 	_, err = db.Exec(`
 		CREATE TABLE IF NOT EXISTS schema_migrations (
 			version VARCHAR(255) PRIMARY KEY,
-			applied_at TIMESTAMP DEFAULT current_timestamp
+			applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)
 	`)
 	if err != nil {
@@ -45,7 +45,7 @@ func RunMigrations(db *sql.DB, migrationPath string) error {
 		// Verificar se a migration já foi aplicada
 		var count int
 		err := db.QueryRow(
-			"SELECT COUNT(*) FROM schema_migrations WHERE version = ?",
+			"SELECT COUNT(*) FROM schema_migrations WHERE version = $1",
 			version,
 		).Scan(&count)
 
@@ -79,7 +79,7 @@ func RunMigrations(db *sql.DB, migrationPath string) error {
 
 		// Registrar migration aplicada
 		_, err = tx.Exec(
-			"INSERT INTO schema_migrations (version) VALUES (?)",
+			"INSERT INTO schema_migrations (version) VALUES ($1)",
 			version,
 		)
 		if err != nil {

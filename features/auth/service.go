@@ -132,7 +132,7 @@ func (s *Service) RefreshToken(refreshToken string) (*LoginResponse, error) {
 	}, nil
 }
 
-func (s *Service) Logout(userID int) error {
+func (s *Service) Logout(userID string) error {
 	return s.repo.ClearRefreshToken(userID)
 }
 

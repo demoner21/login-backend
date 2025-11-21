@@ -19,6 +19,16 @@ type Response struct {
 	Error   string      `json:"error,omitempty"`
 }
 
+// Login
+// @Summary Login do usuário
+// @Description Faz login do usuário e retorna tokens JWT
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param request body LoginRequest true "Credenciais de login"
+// @Success 200 {object} Response{data=LoginResponse}
+// @Failure 401 {object} Response
+// @Router /auth/login [post]
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	var req LoginRequest
 

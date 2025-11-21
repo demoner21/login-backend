@@ -1,7 +1,1 @@
-INSTALL spatial;
-INSTALL httpfs;
-INSTALL json;
-
-LOAD spatial;
-LOAD httpfs;
-LOAD json;
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";

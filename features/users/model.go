@@ -17,7 +17,7 @@ type UpdateUserRequest struct {
 }
 
 type UserResponse struct {
-	ID          string     `json:"id"`
+	ID          string     `json:"id"` // Agora é string (Snowflake ID)
 	Email       string     `json:"email"`
 	Name        string     `json:"name"`
 	RoleID      int        `json:"role_id"`

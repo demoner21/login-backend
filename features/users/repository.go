@@ -2,7 +2,9 @@ package users
 
 import (
 	"database/sql"
+	"fmt"
 	"loginbackend/features/shared/models"
+	"loginbackend/pkg/utils"
 )
 
 type Repository struct {
@@ -16,10 +18,11 @@ func NewRepository(db *sql.DB) *Repository {
 func (r *Repository) Create(user models.User) error {
 	query := `
 		INSERT INTO users 
-		(email, name, password_hash, role_id, is_active) 
-		VALUES (?, ?, ?, ?, ?)
+		(id, email, name, password_hash, role_id, is_active) 
+		VALUES ($1, $2, $3, $4, $5, $6)
 	`
-	result, err := r.db.Exec(query,
+	_, err := r.db.Exec(query,
+		user.ID,
 		user.Email,
 		user.Name,
 		user.PasswordHash,
@@ -27,25 +30,18 @@ func (r *Repository) Create(user models.User) error {
 		user.IsActive,
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("erro ao criar usuário no banco de dados: %w", err)
 	}
-
-	// Obter o ID gerado
-	id, err := result.LastInsertId()
-	if err != nil {
-		return err
-	}
-	user.ID = int(id)
 
 	return nil
 }
 
-func (r *Repository) FindByID(id int) (*models.User, error) {
+func (r *Repository) FindByID(id string) (*models.User, error) {
 	row := r.db.QueryRow(`
 		SELECT id, email, name, password_hash, role_id, is_active, 
 			   created_at, updated_at, last_password_update, is_email_verified,
-			   last_login_at, profile_image_url
-		FROM users WHERE id = ?
+			   last_login_at, profile_image_url, refresh_token
+		FROM users WHERE id = $1
 	`, id)
 
 	return r.scanUser(row)
@@ -55,19 +51,19 @@ func (r *Repository) FindByEmail(email string) (*models.User, error) {
 	row := r.db.QueryRow(`
 		SELECT id, email, name, password_hash, role_id, is_active, 
 			   created_at, updated_at, last_password_update, is_email_verified,
-			   last_login_at, profile_image_url
-		FROM users WHERE email = ?
+			   last_login_at, profile_image_url, refresh_token
+		FROM users WHERE email = $1
 	`, email)
 
 	return r.scanUser(row)
 }
 
 func (r *Repository) EmailExists(email string) (bool, error) {
-	row := r.db.QueryRow(`SELECT COUNT(*) FROM users WHERE email = ?`, email)
+	row := r.db.QueryRow(`SELECT COUNT(*) FROM users WHERE email = $1`, email)
 
 	var count int
 	if err := row.Scan(&count); err != nil {
-		return false, err
+		return false, fmt.Errorf("erro ao verificar existência do email: %w", err)
 	}
 
 	return count > 0, nil
@@ -77,11 +73,11 @@ func (r *Repository) List() ([]models.User, error) {
 	rows, err := r.db.Query(`
 		SELECT id, email, name, role_id, is_active, created_at, 
 			   updated_at, last_password_update, is_email_verified,
-			   last_login_at, profile_image_url
+			   last_login_at, profile_image_url, refresh_token
 		FROM users ORDER BY created_at DESC
 	`)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("erro ao executar query de listagem: %w", err)
 	}
 	defer rows.Close()
 
@@ -89,9 +85,13 @@ func (r *Repository) List() ([]models.User, error) {
 	for rows.Next() {
 		user, err := r.scanUserFromRows(rows)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("erro ao scanear usuário: %w", err)
 		}
 		users = append(users, *user)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("erro durante iteração dos resultados: %w", err)
 	}
 
 	return users, nil
@@ -100,32 +100,146 @@ func (r *Repository) List() ([]models.User, error) {
 func (r *Repository) Update(user models.User) error {
 	query := `
 		UPDATE users SET 
-			email = ?, name = ?, role_id = ?, is_active = ?,
+			email = $1, name = $2, role_id = $3, is_active = $4,
 			updated_at = CURRENT_TIMESTAMP
-		WHERE id = ?
+		WHERE id = $5
 	`
-	_, err := r.db.Exec(query,
+	result, err := r.db.Exec(query,
 		user.Email,
 		user.Name,
 		user.RoleID,
 		user.IsActive,
 		user.ID,
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("erro ao executar update do usuário: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("erro ao verificar linhas afetadas: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("usuário não encontrado para update")
+	}
+
+	return nil
 }
 
-func (r *Repository) Delete(id int) error {
-	_, err := r.db.Exec(
-		`UPDATE users SET is_active = false, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+func (r *Repository) Delete(id string) error {
+	result, err := r.db.Exec(
+		`UPDATE users SET is_active = false, updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
 		id,
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("erro ao desativar usuário: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("erro ao verificar linhas afetadas: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("usuário não encontrado para desativação")
+	}
+
+	return nil
+}
+
+func (r *Repository) UpdateLastLogin(userID string) error {
+	result, err := r.db.Exec(
+		`UPDATE users SET last_login_at = CURRENT_TIMESTAMP WHERE id = $1`,
+		userID,
+	)
+	if err != nil {
+		return fmt.Errorf("erro ao atualizar último login: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("erro ao verificar linhas afetadas: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("usuário não encontrado para atualizar último login")
+	}
+
+	return nil
+}
+
+func (r *Repository) SaveRefreshToken(userID string, refreshToken string) error {
+	result, err := r.db.Exec(
+		`UPDATE users SET refresh_token = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
+		refreshToken, userID,
+	)
+	if err != nil {
+		return fmt.Errorf("erro ao salvar refresh token: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("erro ao verificar linhas afetadas: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("usuário não encontrado para salvar refresh token")
+	}
+
+	return nil
+}
+
+func (r *Repository) FindUserByRefreshToken(refreshToken string) (*models.User, error) {
+	row := r.db.QueryRow(`
+		SELECT id, email, name, role_id, is_active, created_at
+		FROM users WHERE refresh_token = $1 AND is_active = true
+	`, refreshToken)
+
+	var user models.User
+	err := row.Scan(
+		&user.ID,
+		&user.Email,
+		&user.Name,
+		&user.RoleID,
+		&user.IsActive,
+		&user.CreatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("erro ao buscar usuário por refresh token: %w", err)
+	}
+
+	return &user, nil
+}
+
+func (r *Repository) ClearRefreshToken(userID string) error {
+	result, err := r.db.Exec(
+		`UPDATE users SET refresh_token = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+		userID,
+	)
+	if err != nil {
+		return fmt.Errorf("erro ao limpar refresh token: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("erro ao verificar linhas afetadas: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("usuário não encontrado para limpar refresh token")
+	}
+
+	return nil
 }
 
 // scanUser - Helper para scan do sql.Row
 func (r *Repository) scanUser(row *sql.Row) (*models.User, error) {
 	var user models.User
-	var lastLoginAt, profileImageUrl sql.NullString
+	var lastLoginAt, profileImageUrl, refreshToken sql.NullString
 	var lastPasswordUpdate sql.NullTime
 
 	err := row.Scan(
@@ -141,21 +255,36 @@ func (r *Repository) scanUser(row *sql.Row) (*models.User, error) {
 		&user.IsEmailVerified,
 		&lastLoginAt,
 		&profileImageUrl,
+		&refreshToken,
 	)
 
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
-		return nil, err
+		return nil, fmt.Errorf("erro ao scanear usuário: %w", err)
 	}
 
 	// Handle nullable fields
 	if lastPasswordUpdate.Valid {
 		user.LastPasswordUpdate = lastPasswordUpdate.Time
+	} else {
+		user.LastPasswordUpdate = user.CreatedAt
 	}
+
 	if profileImageUrl.Valid {
 		user.ProfileImageUrl = &profileImageUrl.String
+	}
+
+	if refreshToken.Valid {
+		user.RefreshToken = &refreshToken.String
+	}
+
+	if lastLoginAt.Valid {
+		lastLoginTime, err := utils.ParseTime(lastLoginAt.String)
+		if err == nil {
+			user.LastLoginAt = &lastLoginTime
+		}
 	}
 
 	return &user, nil
@@ -164,7 +293,7 @@ func (r *Repository) scanUser(row *sql.Row) (*models.User, error) {
 // scanUserFromRows - Helper para scan do sql.Rows
 func (r *Repository) scanUserFromRows(rows *sql.Rows) (*models.User, error) {
 	var user models.User
-	var lastLoginAt, profileImageUrl sql.NullString
+	var lastLoginAt, profileImageUrl, refreshToken sql.NullString
 	var lastPasswordUpdate sql.NullTime
 
 	err := rows.Scan(
@@ -179,18 +308,33 @@ func (r *Repository) scanUserFromRows(rows *sql.Rows) (*models.User, error) {
 		&user.IsEmailVerified,
 		&lastLoginAt,
 		&profileImageUrl,
+		&refreshToken,
 	)
 
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("erro ao scanear usuário do rows: %w", err)
 	}
 
 	// Handle nullable fields
 	if lastPasswordUpdate.Valid {
 		user.LastPasswordUpdate = lastPasswordUpdate.Time
+	} else {
+		user.LastPasswordUpdate = user.CreatedAt
 	}
+
 	if profileImageUrl.Valid {
 		user.ProfileImageUrl = &profileImageUrl.String
+	}
+
+	if refreshToken.Valid {
+		user.RefreshToken = &refreshToken.String
+	}
+
+	if lastLoginAt.Valid {
+		lastLoginTime, err := utils.ParseTime(lastLoginAt.String)
+		if err == nil {
+			user.LastLoginAt = &lastLoginTime
+		}
 	}
 
 	return &user, nil

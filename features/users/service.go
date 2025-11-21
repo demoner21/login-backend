@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"loginbackend/features/shared/models"
 	"loginbackend/pkg/utils"
+	"strconv"
 )
 
 type Service struct {
@@ -47,8 +48,12 @@ func (s *Service) Create(req CreateUserRequest) (*models.User, error) {
 		roleID = 2 // USER
 	}
 
+	// Gerar Snowflake ID
+	snowflakeID := utils.GenerateSnowflakeID()
+
 	// Criar usuário
 	user := models.User{
+		ID:           snowflakeID,
 		Name:         req.Name,
 		Email:        req.Email,
 		PasswordHash: hash,
@@ -73,7 +78,9 @@ func (s *Service) Create(req CreateUserRequest) (*models.User, error) {
 
 // GetByID - Busca usuário por ID
 func (s *Service) GetByID(id int) (*models.User, error) {
-	user, err := s.repo.FindByID(id)
+	// Converter int para string (Snowflake ID)
+	userID := strconv.Itoa(id)
+	user, err := s.repo.FindByID(userID)
 	if err != nil {
 		return nil, fmt.Errorf("erro ao buscar usuário: %w", err)
 	}
@@ -102,8 +109,11 @@ func (s *Service) List() ([]models.User, error) {
 
 // Update - Atualiza usuário
 func (s *Service) Update(id int, req UpdateUserRequest) (*models.User, error) {
+	// Converter int para string (Snowflake ID)
+	userID := strconv.Itoa(id)
+
 	// Buscar usuário existente
-	existing, err := s.repo.FindByID(id)
+	existing, err := s.repo.FindByID(userID)
 	if err != nil {
 		return nil, fmt.Errorf("erro ao buscar usuário: %w", err)
 	}
@@ -132,5 +142,7 @@ func (s *Service) Update(id int, req UpdateUserRequest) (*models.User, error) {
 
 // Delete - Desativa usuário
 func (s *Service) Delete(id int) error {
-	return s.repo.Delete(id)
+	// Converter int para string (Snowflake ID)
+	userID := strconv.Itoa(id)
+	return s.repo.Delete(userID)
 }
