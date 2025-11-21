@@ -3,6 +3,7 @@ package config
 import (
 	"log"
 	"os"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
@@ -14,25 +15,44 @@ type Config struct {
 	PostgresPassword string
 	PostgresDB       string
 	PostgresSSLMode  string
+	RedisHost        string
+	RedisPort        string
+	RedisPassword    string
+	JWTSecret        string
+	AllowedOrigins   []string
 }
 
-func Load() Config {
-	// Carregar .env (ignora erro se arquivo não existir)
-	if err := godotenv.Load(); err != nil {
-		log.Printf("⚠️ Arquivo .env não encontrado, usando variáveis de ambiente do sistema")
-	}
+func Load() *Config {
+	// Tenta carregar .env, mas não falha se não existir (pode ser variáveis de sistema)
+	_ = godotenv.Load()
 
-	return Config{
-		PostgresHost:     getEnv("POSTGRES_HOST", "localhost"),
-		PostgresPort:     getEnv("POSTGRES_PORT", "5432"),
-		PostgresUser:     getEnv("POSTGRES_USER", "admin"),
-		PostgresPassword: getEnv("POSTGRES_PASSWORD", "password"),
-		PostgresDB:       getEnv("POSTGRES_DB", "appdb"),
+	cfg := &Config{
+		PostgresHost:     os.Getenv("POSTGRES_HOST"),
+		PostgresPort:     os.Getenv("POSTGRES_PORT"),
+		PostgresUser:     os.Getenv("POSTGRES_USER"),
+		PostgresPassword: os.Getenv("POSTGRES_PASSWORD"),
+		PostgresDB:       os.Getenv("POSTGRES_DB"),
 		PostgresSSLMode:  getEnv("POSTGRES_SSLMODE", "disable"),
+		RedisHost:        getEnv("REDIS_HOST", "localhost"),
+		RedisPort:        getEnv("REDIS_PORT", "6379"),
+		RedisPassword:    os.Getenv("REDIS_PASSWORD"),
+		JWTSecret:        os.Getenv("JWT_SECRET"),
+		AllowedOrigins:   strings.Split(os.Getenv("ALLOWED_ORIGINS"), ","),
 	}
+
+	// Validação Crítica: Se faltar segredo, a aplicação NÃO SOBE.
+	if cfg.JWTSecret == "" {
+		log.Fatal("❌ FATAL: JWT_SECRET não está configurado.")
+	}
+	if cfg.PostgresPassword == "" {
+		log.Fatal("❌ FATAL: POSTGRES_PASSWORD não está configurado.")
+	}
+	// Adicione validações para os outros campos de banco se desejar
+
+	return cfg
 }
 
-func (c Config) GetConnectionString() string {
+func (c *Config) GetConnectionString() string {
 	return "host=" + c.PostgresHost +
 		" port=" + c.PostgresPort +
 		" user=" + c.PostgresUser +
