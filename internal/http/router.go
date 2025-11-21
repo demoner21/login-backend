@@ -2,13 +2,12 @@ package http
 
 import (
 	"loginbackend/config"
+	"loginbackend/internal/http/ratelimit"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
 	"github.com/go-chi/httprate"
-
-	hrredis "github.com/go-chi/httprate-redis"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -26,10 +25,7 @@ func NewRouter(cfg *config.Config, redisClient *redis.Client) *chi.Mux {
 		100,
 		1*time.Minute,
 		httprate.WithKeyFuncs(httprate.KeyByIP),
-		httprate.WithLimitCounter(&hrredis.RedisLimitCounter{ // ✅ Usando alias hrredis
-			Client: redisClient, // Agora os tipos serão compatíveis (ambos v9)
-			Prefix: "global-rate-limit:",
-		}),
+		httprate.WithLimitCounter(ratelimit.NewRedisLimitCounter(redisClient, "global-rate")),
 	))
 
 	r.Use(cors.Handler(cors.Options{
