@@ -23,6 +23,10 @@ type Config struct {
 
 	AdminEmail    string
 	AdminPassword string
+
+	UploadProvider string
+	UploadDir      string
+	AppURL         string
 }
 
 func Load() *Config {
@@ -35,15 +39,19 @@ func Load() *Config {
 		PostgresUser:     os.Getenv("POSTGRES_USER"),
 		PostgresPassword: os.Getenv("POSTGRES_PASSWORD"),
 		PostgresDB:       os.Getenv("POSTGRES_DB"),
-		PostgresSSLMode:  getEnv("POSTGRES_SSLMODE", "disable"),
-		RedisHost:        getEnv("REDIS_HOST", "localhost"),
-		RedisPort:        getEnv("REDIS_PORT", "6379"),
+		PostgresSSLMode:  os.Getenv("POSTGRES_SSLMODE"),
+		RedisHost:        os.Getenv("REDIS_HOST"),
+		RedisPort:        os.Getenv("REDIS_PORT"),
 		RedisPassword:    os.Getenv("REDIS_PASSWORD"),
 		JWTSecret:        os.Getenv("JWT_SECRET"),
 		AllowedOrigins:   strings.Split(os.Getenv("ALLOWED_ORIGINS"), ","),
 
 		AdminEmail:    os.Getenv("ADMIN_EMAIL"),
 		AdminPassword: os.Getenv("ADMIN_PASSWORD"),
+
+		UploadProvider: os.Getenv("UPLOAD_PROVIDER"),
+		UploadDir:      os.Getenv("UPLOAD_DIR"),
+		AppURL:         os.Getenv("APP_URL"),
 	}
 
 	// Validação Crítica: Se faltar segredo, a aplicação NÃO SOBE.
@@ -65,11 +73,4 @@ func (c *Config) GetConnectionString() string {
 		" password=" + c.PostgresPassword +
 		" dbname=" + c.PostgresDB +
 		" sslmode=" + c.PostgresSSLMode
-}
-
-func getEnv(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return defaultValue
 }

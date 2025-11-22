@@ -183,3 +183,20 @@ func (s *Service) ChangePassword(userID string, req ChangePasswordRequest) error
 
 	return s.repo.UpdatePassword(userID, newHash)
 }
+
+func (s *Service) UpdateAvatar(userID, avatarURL string) (*models.User, error) {
+	// Verificar se user existe
+	user, err := s.repo.FindByID(userID)
+	if err != nil || user == nil {
+		return nil, errors.New("usuário não encontrado")
+	}
+
+	// Atualizar
+	if err := s.repo.UpdateAvatar(userID, avatarURL); err != nil {
+		return nil, err
+	}
+
+	// Retornar usuário atualizado
+	user.AvatarURL = &avatarURL
+	return user, nil
+}

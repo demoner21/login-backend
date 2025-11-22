@@ -2,6 +2,8 @@ package users
 
 import (
 	"encoding/json"
+	"loginbackend/config"
+	"loginbackend/pkg/uploader"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -140,4 +142,54 @@ func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(Response{Message: "Senha alterada com sucesso"})
+}
+
+// UploadAvatar
+// @Summary Atualizar avatar do usuário
+// @Description Recebe uma imagem via multipart/form-data e atualiza o perfil
+// @Tags users
+// @Accept multipart/form-data
+// @Produce json
+// @Param id path string true "User ID"
+// @Param avatar formData file true "Arquivo de imagem"
+// @Success 200 {object} Response
+// @Router /users/{id}/avatar [post]
+func (h *Handler) UploadAvatar(w http.ResponseWriter, r *http.Request) {
+	userID := chi.URLParam(r, "id")
+
+	// 1. Limitar tamanho do upload (ex: 5MB)
+	r.ParseMultipartForm(5 << 20)
+
+	// 2. Pegar o arquivo do form key "avatar"
+	file, header, err := r.FormFile("avatar")
+	if err != nil {
+		http.Error(w, "Erro ao ler arquivo: avatar é obrigatório", http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+
+	// 3. Processar Upload (usando nosso helper)
+	// Precisamos injetar a config no Handler ou pegar via helper.
+	// Assumindo que você tem acesso a cfg via h.service ou global, ou passe cfg na inicialização do Handler.
+	// Para simplificar aqui, vamos supor que o Service tem a config:
+	cfg := config.Load() // Ou injetado
+
+	avatarURL, err := uploader.UploadFile(file, header, cfg)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// 4. Atualizar registro no Banco (Service)
+	updatedUser, err := h.service.UpdateAvatar(userID, avatarURL)
+	if err != nil {
+		http.Error(w, "Erro ao atualizar perfil no banco", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(Response{
+		Message: "Avatar atualizado com sucesso",
+		Data:    updatedUser,
+	})
 }

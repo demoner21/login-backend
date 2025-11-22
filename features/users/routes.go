@@ -34,7 +34,7 @@ func Routes(handler *Handler, jwtSecret string, redisClient *redis.Client) (stri
 				r.Delete("/{id}", handler.DeleteUser)
 
 				r.Post("/{id}/change-password", handler.ChangePassword)
-				// r.Post("/{id}/avatar", handler.UploadAvatar)
+				r.Post("/{id}/avatar", handler.UploadAvatar)
 			})
 		})
 	}

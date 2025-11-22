@@ -363,3 +363,9 @@ func (r *Repository) UpdatePassword(userID, newHash string) error {
 	`, newHash, userID)
 	return err
 }
+
+func (r *Repository) UpdateAvatar(userID, avatarURL string) error {
+	query := `UPDATE users SET avatar_url = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`
+	_, err := r.db.Exec(query, avatarURL, userID)
+	return err
+}
