@@ -157,39 +157,34 @@ func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) UploadAvatar(w http.ResponseWriter, r *http.Request) {
 	userID := chi.URLParam(r, "id")
 
-	// 1. Limitar tamanho do upload (ex: 5MB)
+	// Limite de 5MB
 	r.ParseMultipartForm(5 << 20)
 
-	// 2. Pegar o arquivo do form key "avatar"
-	file, header, err := r.FormFile("avatar")
+	file, _, err := r.FormFile("avatar")
 	if err != nil {
-		http.Error(w, "Erro ao ler arquivo: avatar é obrigatório", http.StatusBadRequest)
+		http.Error(w, "Arquivo obrigatório", http.StatusBadRequest)
 		return
 	}
 	defer file.Close()
 
-	// 3. Processar Upload (usando nosso helper)
-	// Precisamos injetar a config no Handler ou pegar via helper.
-	// Assumindo que você tem acesso a cfg via h.service ou global, ou passe cfg na inicialização do Handler.
-	// Para simplificar aqui, vamos supor que o Service tem a config:
-	cfg := config.Load() // Ou injetado
+	cfg := config.Load()
 
-	avatarURL, err := uploader.UploadFile(file, header, cfg)
+	avatarURL, err := uploader.UploadProfilePicture(userID, file, nil, cfg)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	// 4. Atualizar registro no Banco (Service)
+	// Atualiza no banco (Service)
 	updatedUser, err := h.service.UpdateAvatar(userID, avatarURL)
 	if err != nil {
-		http.Error(w, "Erro ao atualizar perfil no banco", http.StatusInternalServerError)
+		http.Error(w, "Erro ao atualizar banco", http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(Response{
-		Message: "Avatar atualizado com sucesso",
+		Message: "Avatar atualizado",
 		Data:    updatedUser,
 	})
 }

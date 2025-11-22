@@ -27,6 +27,7 @@ type Config struct {
 	UploadProvider string
 	UploadDir      string
 	AppURL         string
+	StorageURL     string
 }
 
 func Load() *Config {
@@ -52,6 +53,7 @@ func Load() *Config {
 		UploadProvider: os.Getenv("UPLOAD_PROVIDER"),
 		UploadDir:      os.Getenv("UPLOAD_DIR"),
 		AppURL:         os.Getenv("APP_URL"),
+		StorageURL:     os.Getenv("STORAGE_URL"),
 	}
 
 	// Validação Crítica: Se faltar segredo, a aplicação NÃO SOBE.
