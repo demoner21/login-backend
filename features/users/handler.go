@@ -114,3 +114,30 @@ func (h *Handler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(Response{Message: "usuário deletado com sucesso"})
 }
+
+func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
+	// Pegar ID da URL
+	userID := chi.URLParam(r, "id")
+
+	var req ChangePasswordRequest
+
+	// Decodificar JSON
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "JSON inválido", http.StatusBadRequest)
+		return
+	}
+
+	// Chamar serviço
+	// O erro "bool and nil" acontecia aqui se o Service retornasse bool.
+	// Agora que o Service retorna error, a comparação (err != nil) funciona.
+	if err := h.service.ChangePassword(userID, req); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest) // Ou 401/403 dependendo do erro, mas 400 serve
+		json.NewEncoder(w).Encode(Response{Error: err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(Response{Message: "Senha alterada com sucesso"})
+}

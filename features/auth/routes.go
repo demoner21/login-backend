@@ -16,7 +16,7 @@ func Routes(handler *Handler, redisClient *redis.Client) (string, func(r chi.Rou
 
 		// Rate Limit específico para LOGIN (Anti-Brute Force)
 		loginLimiter := httprate.Limit(
-			5,
+			60,
 			1*time.Minute,
 			httprate.WithKeyFuncs(httprate.KeyByIP),
 			// ✅ Usa o alias 'hrredis' aqui

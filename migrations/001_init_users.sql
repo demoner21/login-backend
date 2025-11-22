@@ -1,6 +1,6 @@
 -- Migration v0.01 - Sistema de Autenticação PostgreSQL com Snowflake ID
 -- Created by: Anderson Demoner
--- Date: 2025-11-21
+-- Date: 2025-11-20
 
 -- Tabela de roles (simplificada)
 CREATE TABLE IF NOT EXISTS roles (

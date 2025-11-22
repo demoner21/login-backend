@@ -1,16 +1,21 @@
 package auth
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"loginbackend/pkg/utils"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/redis/go-redis/v9"
 	"golang.org/x/crypto/bcrypt"
 )
 
 type Service struct {
 	repo          *Repository
+	redis         *redis.Client
 	jwtSecret     string
 	accessExpiry  time.Duration
 	refreshExpiry time.Duration
@@ -22,9 +27,10 @@ type Config struct {
 	RefreshExpiry time.Duration
 }
 
-func NewService(repo *Repository, cfg Config) *Service {
+func NewService(repo *Repository, redisClient *redis.Client, cfg Config) *Service {
 	return &Service{
 		repo:          repo,
+		redis:         redisClient,
 		jwtSecret:     cfg.JWTSecret,
 		accessExpiry:  cfg.AccessExpiry,
 		refreshExpiry: cfg.RefreshExpiry,
@@ -57,7 +63,7 @@ func (s *Service) Login(email, password string) (*LoginResponse, error) {
 
 	// Gerar tokens
 	accessToken, err := utils.GenerateJWT(utils.TokenClaims{
-		UserID: user.ID, // Agora é int, compatível com o model
+		UserID: user.ID,
 		Email:  user.Email,
 		RoleID: user.RoleID,
 	}, s.jwtSecret, s.accessExpiry)
@@ -75,7 +81,7 @@ func (s *Service) Login(email, password string) (*LoginResponse, error) {
 	}
 
 	userResponse := &UserResponse{
-		ID:        user.ID, // Agora é int, compatível com o model
+		ID:        user.ID,
 		Email:     user.Email,
 		Name:      user.Name,
 		RoleID:    user.RoleID,
@@ -98,7 +104,7 @@ func (s *Service) RefreshToken(refreshToken string) (*LoginResponse, error) {
 	}
 
 	accessToken, err := utils.GenerateJWT(utils.TokenClaims{
-		UserID: user.ID, // Agora é int, compatível com o model
+		UserID: user.ID,
 		Email:  user.Email,
 		RoleID: user.RoleID,
 	}, s.jwtSecret, s.accessExpiry)
@@ -116,7 +122,7 @@ func (s *Service) RefreshToken(refreshToken string) (*LoginResponse, error) {
 	}
 
 	userResponse := &UserResponse{
-		ID:        user.ID, // Agora é int, compatível com o model
+		ID:        user.ID,
 		Email:     user.Email,
 		Name:      user.Name,
 		RoleID:    user.RoleID,
@@ -132,8 +138,59 @@ func (s *Service) RefreshToken(refreshToken string) (*LoginResponse, error) {
 	}, nil
 }
 
-func (s *Service) Logout(userID string) error {
-	return s.repo.ClearRefreshToken(userID)
+func (s *Service) Logout(tokenString, userID string) error {
+	// 1. Limpar Refresh Token no Banco (Postgres)
+	if err := s.repo.ClearRefreshToken(userID); err != nil {
+		return err
+	}
+
+	// 2. Blacklist do Access Token no Redis
+	return s.addToBlacklist(tokenString)
+}
+
+// Helper para adicionar à Blacklist
+func (s *Service) addToBlacklist(tokenString string) error {
+	// Parse do token (sem validar assinatura, apenas para pegar o 'exp')
+	token, _, err := new(jwt.Parser).ParseUnverified(tokenString, jwt.MapClaims{})
+	if err != nil {
+		return fmt.Errorf("erro ao ler token para blacklist: %w", err)
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return errors.New("claims inválidos")
+	}
+
+	// Calcular tempo restante de vida do token
+	var exp int64
+	switch v := claims["exp"].(type) {
+	case float64:
+		exp = int64(v)
+	case json.Number:
+		exp, _ = v.Int64()
+	}
+
+	if exp == 0 {
+		return nil // Sem expiração, não faz nada (ou força um default)
+	}
+
+	expiresAt := time.Unix(exp, 0)
+	timeRemaining := time.Until(expiresAt)
+
+	// Se já expirou, não precisa salvar no Redis
+	if timeRemaining <= 0 {
+		return nil
+	}
+
+	// Salvar no Redis: Chave = "blacklist:{token}", Valor = "revoked", TTL = timeRemaining
+	ctx := context.Background()
+	key := fmt.Sprintf("blacklist:%s", tokenString)
+
+	if err := s.redis.Set(ctx, key, "revoked", timeRemaining).Err(); err != nil {
+		return fmt.Errorf("erro ao salvar na blacklist: %w", err)
+	}
+
+	return nil
 }
 
 // ValidateToken valida um token JWT e retorna os claims

@@ -5,28 +5,28 @@ import (
 	"fmt"
 	"loginbackend/features/shared/models"
 	"loginbackend/pkg/utils"
+
+	"github.com/go-playground/validator/v10"
 )
 
 type Service struct {
-	repo *Repository
+	repo     *Repository
+	validate *validator.Validate
 }
 
 func NewService(repo *Repository) *Service {
-	return &Service{repo: repo}
+	return &Service{
+		repo:     repo,
+		validate: validator.New(),
+	}
 }
 
-// Create - Cria usuário (sem lógica de login/sessão)
+// Create - Cria usuário
 func (s *Service) Create(req CreateUserRequest) (*models.User, error) {
-	// Validações básicas
-	if req.Name == "" || req.Email == "" || req.Password == "" {
-		return nil, errors.New("nome, email e senha são obrigatórios")
+	if err := s.validate.Struct(req); err != nil {
+		return nil, fmt.Errorf("erro de validação: %w", err)
 	}
 
-	if len(req.Password) < 6 {
-		return nil, errors.New("a senha deve ter pelo menos 6 caracteres")
-	}
-
-	// Verificar se email já existe
 	exists, err := s.repo.EmailExists(req.Email)
 	if err != nil {
 		return nil, fmt.Errorf("erro ao verificar email: %w", err)
@@ -35,22 +35,18 @@ func (s *Service) Create(req CreateUserRequest) (*models.User, error) {
 		return nil, errors.New("email já cadastrado")
 	}
 
-	// Hash da senha
 	hash, err := utils.HashPassword(req.Password)
 	if err != nil {
 		return nil, fmt.Errorf("erro ao gerar hash da senha: %w", err)
 	}
 
-	// Definir role padrão se não especificada
 	roleID := req.RoleID
 	if roleID == 0 {
 		roleID = 2 // USER
 	}
 
-	// Gerar Snowflake ID
 	snowflakeID := utils.GenerateSnowflakeID()
 
-	// Criar usuário
 	user := models.User{
 		ID:           snowflakeID,
 		Name:         req.Name,
@@ -64,19 +60,16 @@ func (s *Service) Create(req CreateUserRequest) (*models.User, error) {
 		return nil, fmt.Errorf("erro ao criar usuário: %w", err)
 	}
 
-	// Buscar usuário criado para retornar com ID
 	createdUser, err := s.repo.FindByEmail(user.Email)
 	if err != nil {
 		return nil, fmt.Errorf("erro ao buscar usuário criado: %w", err)
 	}
 
-	// Retornar usuário sem password hash
 	createdUser.PasswordHash = ""
 	return createdUser, nil
 }
 
 // GetByID - Busca usuário por ID
-// ✅ CORREÇÃO: Recebe string diretamente
 func (s *Service) GetByID(userID string) (*models.User, error) {
 	user, err := s.repo.FindByID(userID)
 	if err != nil {
@@ -97,7 +90,6 @@ func (s *Service) List() ([]models.User, error) {
 		return nil, fmt.Errorf("erro ao listar usuários: %w", err)
 	}
 
-	// Remover password hash de todos os usuários
 	for i := range users {
 		users[i].PasswordHash = ""
 	}
@@ -106,9 +98,11 @@ func (s *Service) List() ([]models.User, error) {
 }
 
 // Update - Atualiza usuário
-// ✅ CORREÇÃO: Recebe string diretamente
 func (s *Service) Update(userID string, req UpdateUserRequest) (*models.User, error) {
-	// Buscar usuário existente
+	if err := s.validate.Struct(req); err != nil {
+		return nil, fmt.Errorf("erro de validação: %w", err)
+	}
+
 	existing, err := s.repo.FindByID(userID)
 	if err != nil {
 		return nil, fmt.Errorf("erro ao buscar usuário: %w", err)
@@ -117,12 +111,35 @@ func (s *Service) Update(userID string, req UpdateUserRequest) (*models.User, er
 		return nil, errors.New("usuário não encontrado")
 	}
 
-	// Aplicar updates
 	if req.Name != nil {
 		existing.Name = *req.Name
 	}
 	if req.Email != nil {
 		existing.Email = *req.Email
+	}
+	if req.Phone != nil {
+		existing.Phone = req.Phone
+	}
+	if req.JobTitle != nil {
+		existing.JobTitle = req.JobTitle
+	}
+	if req.Location != nil {
+		existing.Location = req.Location
+	}
+	if req.Country != nil {
+		existing.Country = req.Country
+	}
+	if req.City != nil {
+		existing.City = req.City
+	}
+	if req.State != nil {
+		existing.State = req.State
+	}
+	if req.PostalCode != nil {
+		existing.PostalCode = req.PostalCode
+	}
+	if req.TaxID != nil {
+		existing.TaxID = req.TaxID
 	}
 	if req.RoleID != nil {
 		existing.RoleID = *req.RoleID
@@ -137,7 +154,32 @@ func (s *Service) Update(userID string, req UpdateUserRequest) (*models.User, er
 }
 
 // Delete - Desativa usuário
-// ✅ CORREÇÃO: Recebe string diretamente
 func (s *Service) Delete(userID string) error {
 	return s.repo.Delete(userID)
+}
+
+func (s *Service) ChangePassword(userID string, req ChangePasswordRequest) error {
+
+	if err := s.validate.Struct(req); err != nil {
+		return fmt.Errorf("dados inválidos: %w", err)
+	}
+
+	user, err := s.repo.FindByID(userID)
+	if err != nil {
+		return fmt.Errorf("erro ao buscar usuário: %w", err)
+	}
+	if user == nil {
+		return errors.New("usuário não encontrado")
+	}
+
+	if !utils.CheckPassword(req.CurrentPassword, user.PasswordHash) {
+		return errors.New("senha atual incorreta")
+	}
+
+	newHash, err := utils.HashPassword(req.NewPassword)
+	if err != nil {
+		return fmt.Errorf("erro ao gerar hash: %w", err)
+	}
+
+	return s.repo.UpdatePassword(userID, newHash)
 }

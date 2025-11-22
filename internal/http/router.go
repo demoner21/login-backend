@@ -2,6 +2,7 @@ package http
 
 import (
 	"loginbackend/config"
+	"loginbackend/internal/http/middleware"
 	"loginbackend/internal/http/ratelimit"
 	"time"
 
@@ -19,6 +20,9 @@ func NewRouter(cfg *config.Config, redisClient *redis.Client) *chi.Mux {
 	if len(origins) == 0 {
 		origins = []string{"http://localhost:5173"}
 	}
+
+	// SECURITY HEADERS
+	r.Use(middleware.SecurityHeaders)
 
 	// Rate Limit GLOBAL (DDoS Protection)
 	r.Use(httprate.Limit(

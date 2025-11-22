@@ -53,7 +53,7 @@ func (r *Repository) FindUserByEmail(email string) (*models.User, error) {
 		user.LastPasswordUpdate = lastPasswordUpdate.Time
 	}
 	if profileImageUrl.Valid {
-		user.ProfileImageUrl = &profileImageUrl.String
+		user.AvatarURL = &profileImageUrl.String
 	}
 	if refreshToken.Valid {
 		user.RefreshToken = &refreshToken.String

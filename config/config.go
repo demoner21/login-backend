@@ -20,6 +20,9 @@ type Config struct {
 	RedisPassword    string
 	JWTSecret        string
 	AllowedOrigins   []string
+
+	AdminEmail    string
+	AdminPassword string
 }
 
 func Load() *Config {
@@ -38,6 +41,9 @@ func Load() *Config {
 		RedisPassword:    os.Getenv("REDIS_PASSWORD"),
 		JWTSecret:        os.Getenv("JWT_SECRET"),
 		AllowedOrigins:   strings.Split(os.Getenv("ALLOWED_ORIGINS"), ","),
+
+		AdminEmail:    os.Getenv("ADMIN_EMAIL"),
+		AdminPassword: os.Getenv("ADMIN_PASSWORD"),
 	}
 
 	// Validação Crítica: Se faltar segredo, a aplicação NÃO SOBE.
