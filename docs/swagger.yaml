@@ -1,13 +1,13 @@
 basePath: /
 definitions:
-  auth.LoginRequest:
+  features_auth.LoginRequest:
     properties:
       email:
         type: string
       password:
         type: string
     type: object
-  auth.LoginResponse:
+  features_auth.LoginResponse:
     properties:
       access_token:
         type: string
@@ -18,9 +18,9 @@ definitions:
       token_type:
         type: string
       user:
-        $ref: '#/definitions/auth.UserResponse'
+        $ref: '#/definitions/features_auth.UserResponse'
     type: object
-  auth.Response:
+  features_auth.Response:
     properties:
       data: {}
       error:
@@ -28,7 +28,7 @@ definitions:
       message:
         type: string
     type: object
-  auth.UserResponse:
+  features_auth.UserResponse:
     properties:
       created_at:
         type: string
@@ -42,11 +42,97 @@ definitions:
       role_id:
         type: integer
     type: object
+  features_tasks.CreateTaskRequest:
+    properties:
+      description:
+        type: string
+      due_date:
+        description: NOVO CAMPO
+        example: "2026-01-20T15:00:00Z"
+        type: string
+      priority:
+        enum:
+        - Low
+        - Medium
+        - High
+        type: string
+      title:
+        minLength: 3
+        type: string
+    required:
+    - title
+    type: object
+  features_tasks.Response:
+    properties:
+      data: {}
+      error:
+        type: string
+      message:
+        type: string
+    type: object
+  features_tasks.Task:
+    properties:
+      created_at:
+        type: string
+      description:
+        type: string
+      due_date:
+        description: NOVO CAMPO
+        type: string
+      id:
+        type: string
+      owner_id:
+        type: string
+      priority:
+        type: string
+      status:
+        type: string
+      title:
+        type: string
+      updated_at:
+        type: string
+      vector_clock:
+        items:
+          type: integer
+        type: array
+      version:
+        type: integer
+    type: object
+  features_tasks.UpdateTaskRequest:
+    properties:
+      description:
+        type: string
+      due_date:
+        type: string
+      priority:
+        enum:
+        - Low
+        - Medium
+        - High
+        type: string
+      status:
+        enum:
+        - Pending
+        - InProgress
+        - Done
+        - Canceled
+        type: string
+      title:
+        minLength: 3
+        type: string
+    type: object
+  features_users.Response:
+    properties:
+      data: {}
+      error:
+        type: string
+      message:
+        type: string
+    type: object
 host: localhost:8080
 info:
   contact: {}
-  description: API de autenticação e gestão de usuários com PostgreSQL e Snowflake
-    ID
+  description: API de autenticação, usuários e tasks com suporte a WebSocket
   title: Login Backend API
   version: "1.0"
 paths:
@@ -61,7 +147,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/auth.LoginRequest'
+          $ref: '#/definitions/features_auth.LoginRequest'
       produces:
       - application/json
       responses:
@@ -69,16 +155,177 @@ paths:
           description: OK
           schema:
             allOf:
-            - $ref: '#/definitions/auth.Response'
+            - $ref: '#/definitions/features_auth.Response'
             - properties:
                 data:
-                  $ref: '#/definitions/auth.LoginResponse'
+                  $ref: '#/definitions/features_auth.LoginResponse'
               type: object
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/auth.Response'
+            $ref: '#/definitions/features_auth.Response'
       summary: Login do usuário
       tags:
       - auth
+  /tasks:
+    get:
+      description: Retorna todas as tarefas ativas do usuário
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/features_tasks.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/features_tasks.Task'
+                  type: array
+              type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/features_tasks.Response'
+      security:
+      - BearerAuth: []
+      summary: List user tasks
+      tags:
+      - tasks
+    post:
+      consumes:
+      - application/json
+      description: Cria uma nova tarefa e inicializa o vector clock
+      parameters:
+      - description: Dados da tarefa
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/features_tasks.CreateTaskRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/features_tasks.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/features_tasks.Task'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/features_tasks.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/features_tasks.Response'
+      summary: Create a new task
+      tags:
+      - tasks
+  /tasks/{id}:
+    delete:
+      description: Marca uma tarefa como deletada
+      parameters:
+      - description: Task ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/features_tasks.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/features_tasks.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/features_tasks.Response'
+      security:
+      - BearerAuth: []
+      summary: Delete a task
+      tags:
+      - tasks
+    put:
+      consumes:
+      - application/json
+      description: Atualiza campos de uma tarefa (título, status, etc)
+      parameters:
+      - description: Task ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Campos para atualizar
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/features_tasks.UpdateTaskRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/features_tasks.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/features_tasks.Task'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/features_tasks.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/features_tasks.Response'
+      security:
+      - BearerAuth: []
+      summary: Update a task
+      tags:
+      - tasks
+  /users/{id}/avatar:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Recebe uma imagem via multipart/form-data e atualiza o perfil
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Arquivo de imagem
+        in: formData
+        name: avatar
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/features_users.Response'
+      summary: Atualizar avatar do usuário
+      tags:
+      - users
+securityDefinitions:
+  BearerAuth:
+    in: header
+    name: Authorization
+    type: apiKey
 swagger: "2.0"
