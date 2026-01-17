@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"log"
@@ -10,9 +11,11 @@ import (
 	"loginbackend/config"
 	"loginbackend/features/auth"
 	"loginbackend/features/shared/models"
+	"loginbackend/features/tasks"
 	"loginbackend/features/users"
 	"loginbackend/internal/database"
 	httpPlatform "loginbackend/internal/http"
+	ws "loginbackend/internal/websocket"
 	"loginbackend/pkg/utils"
 
 	_ "loginbackend/docs"
@@ -22,9 +25,13 @@ import (
 
 // @title Login Backend API
 // @version 1.0
-// @description API de autenticação e gestão de usuários com PostgreSQL e Snowflake ID
+// @description API de autenticação, usuários e tasks com suporte a WebSocket
 // @host localhost:8080
 // @BasePath /
+
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
 func main() {
 	cfg := config.Load()
 
@@ -33,15 +40,20 @@ func main() {
 		log.Fatal("Erro ao inicializar Snowflake:", err)
 	}
 
-	// 1. Conexão com PostgreSQL
+	// Conexão com PostgreSQL
 	db, err := database.NewPostgres(cfg.GetConnectionString())
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	redisClient, err := database.NewRedis(cfg.RedisHost, cfg.RedisPort, cfg.RedisPassword)
+	// Conexão com Redis
+	redisClient, err := database.NewRedis(
+		cfg.RedisHost,
+		cfg.RedisPort,
+		cfg.RedisPassword,
+	)
 	if err != nil {
-		log.Fatal("Erro ao conectar no Redis: ", err)
+		log.Fatal("Erro ao conectar no Redis:", err)
 	}
 
 	// Rodar migrations
@@ -51,6 +63,7 @@ func main() {
 
 	seedSuperAdmin(db, cfg)
 
+	// Inicializar Router
 	r := httpPlatform.NewRouter(cfg, redisClient)
 
 	// Swagger
@@ -58,7 +71,15 @@ func main() {
 		httpSwagger.URL("http://localhost:8080/swagger/doc.json"),
 	))
 
-	// Registrar feature de autenticação
+	// ======================================================
+	// WebSocket Hub
+	// ======================================================
+	hub := ws.NewHub(redisClient)
+	go hub.Run(context.Background())
+
+	// ======================================================
+	// Auth Feature
+	// ======================================================
 	authRepo := auth.NewRepository(db)
 	authService := auth.NewService(authRepo, redisClient, auth.Config{
 		JWTSecret:     cfg.JWTSecret,
@@ -70,35 +91,62 @@ func main() {
 	authPath, authRoutes := auth.Routes(authHandler, redisClient)
 	r.Route(authPath, authRoutes)
 
-	// Registrar feature de usuários
+	// ======================================================
+	// Users Feature
+	// ======================================================
 	usersRepo := users.NewRepository(db)
 	usersService := users.NewService(usersRepo)
 	usersHandler := users.NewHandler(usersService)
 
-	usersPath, usersRoutes := users.Routes(usersHandler, cfg.JWTSecret, redisClient)
+	usersPath, usersRoutes := users.Routes(
+		usersHandler,
+		cfg.JWTSecret,
+		redisClient,
+	)
 	r.Route(usersPath, usersRoutes)
 
-	// Health check
+	// ======================================================
+	// Tasks Feature (HTTP + WebSocket)
+	// ======================================================
+	tasksRepo := tasks.NewRepository(db)
+	tasksService := tasks.NewService(tasksRepo)
+	tasksHandler := tasks.NewHandler(tasksService, hub)
+
+	tasksPath, tasksRoutes := tasks.Routes(
+		tasksHandler,
+		cfg.JWTSecret,
+		redisClient,
+	)
+	r.Route(tasksPath, tasksRoutes)
+
+	// ======================================================
+	// Health Check
+	// ======================================================
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
-		// Verifica DB
 		if err := db.Ping(); err != nil {
 			w.WriteHeader(http.StatusServiceUnavailable)
-			json.NewEncoder(w).Encode(map[string]string{"status": "db_unhealthy"})
-			return
-		}
-		// Verifica Redis
-		if err := redisClient.Ping(r.Context()).Err(); err != nil {
-			w.WriteHeader(http.StatusServiceUnavailable)
-			json.NewEncoder(w).Encode(map[string]string{"status": "redis_unhealthy"})
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"status": "db_unhealthy",
+			})
 			return
 		}
 
-		json.NewEncoder(w).Encode(map[string]string{"status": "healthy"})
+		if err := redisClient.Ping(r.Context()).Err(); err != nil {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"status": "redis_unhealthy",
+			})
+			return
+		}
+
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"status": "healthy",
+		})
 	})
 
 	log.Println("🚀 API rodando em http://localhost:8080")
 	log.Println("📚 Swagger disponível em http://localhost:8080/swagger/index.html")
-	log.Printf("📁 Database: PostgreSQL + Redis")
+	log.Println("📁 Stack: PostgreSQL + Redis + WebSocket")
 
 	if err := http.ListenAndServe(":8080", r); err != nil {
 		log.Fatal(err)
@@ -106,49 +154,44 @@ func main() {
 }
 
 func seedSuperAdmin(db *sql.DB, cfg *config.Config) {
-	// Se não tiver configuração no .env, ignora
 	if cfg.AdminEmail == "" || cfg.AdminPassword == "" {
-		log.Println("ℹ️ Variáveis ADMIN_EMAIL/PASSWORD não definidas. Pulando criação de Super Admin.")
+		log.Println("ℹ️ ADMIN_EMAIL/PASSWORD não definidos. Pulando Super Admin.")
 		return
 	}
 
 	repo := users.NewRepository(db)
 
-	// Verifica se já existe
 	exists, err := repo.EmailExists(cfg.AdminEmail)
 	if err != nil {
-		log.Printf("⚠️ Erro ao verificar existência do admin: %v", err)
+		log.Printf("⚠️ Erro ao verificar admin: %v", err)
 		return
 	}
 	if exists {
-		log.Println("ℹ️ Super Admin já existe no banco.")
+		log.Println("ℹ️ Super Admin já existe.")
 		return
 	}
 
 	log.Println("🔨 Criando Super Admin automático...")
 
-	// Hash da senha
 	hash, err := utils.HashPassword(cfg.AdminPassword)
 	if err != nil {
-		log.Printf("❌ Erro ao gerar hash do admin: %v", err)
+		log.Printf("❌ Erro ao gerar hash: %v", err)
 		return
 	}
 
-	// Cria o modelo do Admin (RoleID 1 = SUPER_ADMIN conforme sua migration)
 	adminUser := models.User{
 		ID:           utils.GenerateSnowflakeID(),
 		Name:         "Super Admin",
 		Email:        cfg.AdminEmail,
 		PasswordHash: hash,
-		RoleID:       1, // SUPER_ADMIN
+		RoleID:       1,
 		IsActive:     true,
 	}
 
-	// Salva no banco
 	if err := repo.Create(adminUser); err != nil {
 		log.Printf("❌ Erro ao salvar Super Admin: %v", err)
 		return
 	}
 
-	log.Printf("✅ Super Admin criado com sucesso: %s", cfg.AdminEmail)
+	log.Printf("✅ Super Admin criado: %s", cfg.AdminEmail)
 }
