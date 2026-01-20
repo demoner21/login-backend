@@ -336,3 +336,39 @@ func (h *Handler) UpdateTask(w http.ResponseWriter, r *http.Request) {
 		Data:    updatedTask,
 	})
 }
+
+// SyncTasks sincroniza dados offline
+// @Summary Sync tasks
+// @Description Envia mudanças locais e recebe atualizações do servidor
+// @Tags tasks
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body SyncRequest true "Pacote de sincronização"
+// @Success 200 {object} Response{data=SyncResponse}
+// @Failure 500 {object} Response
+// @Router /tasks/sync [post]
+func (h *Handler) SyncTasks(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.GetUserFromContext(r.Context())
+	if claims == nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	var req SyncRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(Response{Error: "JSON inválido"})
+		return
+	}
+
+	resp, err := h.service.ProcessSync(claims.UserID, req)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(Response{Error: err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(Response{Data: resp})
+}

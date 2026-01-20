@@ -16,5 +16,6 @@ func Routes(handler *Handler, jwtSecret string, redisClient *redis.Client) (stri
 		r.Put("/{id}", handler.UpdateTask)
 		r.Delete("/{id}", handler.DeleteTask)
 		r.Get("/ws", handler.HandleWebSocket)
+		r.Post("/sync", handler.SyncTasks)
 	}
 }

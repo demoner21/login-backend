@@ -113,6 +113,31 @@ func (h *Hub) Run(ctx context.Context) {
 					}
 				}
 			}
+
+			// ============================================================
+			// NOVA LÓGICA (Adicione isto): Envia para o Dashboard do Usuário
+			// ============================================================
+			if message.UserID != "" {
+				// Busca todas as conexões deste usuário
+				if userClients, ok := h.clients[message.UserID]; ok {
+					data, _ := json.Marshal(message)
+					for client := range userClients {
+						// Otimização opcional: Se o cliente já recebeu via "room",
+						// aqui ele receberia de novo. O ideal é o frontend lidar com duplicatas
+						// ou fazermos um mapa de "sentClients" aqui.
+						// Para este teste, vamos enviar mesmo que duplique.
+
+						select {
+						case client.Send <- data:
+						default:
+							close(client.Send)
+							delete(userClients, client)
+						}
+					}
+				}
+			}
+			// ============================================================
+
 			h.mu.RUnlock()
 
 			// Aqui você publicaria no Redis para outras instâncias

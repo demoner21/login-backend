@@ -47,3 +47,21 @@ type UpdateTaskRequest struct {
 	Status      *string    `json:"status" validate:"omitempty,oneof=Pending InProgress Done Canceled"`
 	DueDate     *time.Time `json:"due_date"`
 }
+
+// SyncRequest é o payload que o cliente envia quando recupera conexão
+type SyncRequest struct {
+	LastPulledVersion int64        `json:"last_pulled_version"` // Última versão que o cliente conhece
+	Changes           []SyncChange `json:"changes"`             // Lista de mudanças locais
+}
+
+type SyncChange struct {
+	Type    string          `json:"type" validate:"required,oneof=CREATE UPDATE DELETE"`
+	TaskID  string          `json:"task_id" validate:"required"`
+	Payload json.RawMessage `json:"payload"` // O conteúdo da Task (completo ou parcial)
+}
+
+// SyncResponse devolve o que foi processado e o que há de novo no servidor
+type SyncResponse struct {
+	SyncedCount int    `json:"synced_count"`
+	NewTasks    []Task `json:"new_tasks"` // Tarefas que o cliente não tinha
+}

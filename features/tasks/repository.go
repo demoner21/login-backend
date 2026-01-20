@@ -247,3 +247,44 @@ func (r *Repository) Update(task Task) error {
 
 	return tx.Commit()
 }
+
+// ListChanges busca tarefas que foram modificadas APÓS uma certa versão
+// Isso inclui tarefas novas ou atualizadas por outros dispositivos
+func (r *Repository) ListChanges(userID string, minVersion int64) ([]Task, error) {
+	// Nota: Aqui assumimos que 'version' é global ou usamos updated_at
+	// Para simplificar, vamos usar updated_at se version for complexo,
+	// mas como temos version na tabela, usamos ela.
+
+	query := `
+		SELECT id, title, description, priority, status, owner_id, 
+			   version, vector_clock, created_at, updated_at, due_date
+		FROM tasks 
+		WHERE owner_id = $1 AND version > $2
+		ORDER BY version ASC
+	`
+
+	rows, err := r.db.Query(query, userID, minVersion)
+	if err != nil {
+		return nil, fmt.Errorf("erro ao listar mudanças: %w", err)
+	}
+	defer rows.Close()
+
+	var tasks []Task
+	for rows.Next() {
+		var t Task
+		var vectorClockBytes []byte
+		var dueDate sql.NullTime
+
+		rows.Scan(
+			&t.ID, &t.Title, &t.Description, &t.Priority, &t.Status, &t.OwnerID,
+			&t.Version, &vectorClockBytes, &t.CreatedAt, &t.UpdatedAt, &dueDate,
+		)
+		if dueDate.Valid {
+			t.DueDate = &dueDate.Time
+		}
+		t.VectorClock = json.RawMessage(vectorClockBytes)
+
+		tasks = append(tasks, t)
+	}
+	return tasks, nil
+}

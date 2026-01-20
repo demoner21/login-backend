@@ -19,27 +19,33 @@ const (
 func AuthMiddleware(jwtSecret string, redisClient *redis.Client) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			tokenString := ""
+
+			// 1. Tenta pegar do Header Authorization
 			authHeader := r.Header.Get("Authorization")
-			if authHeader == "" {
-				http.Error(w, "Authorization header required", http.StatusUnauthorized)
+			if authHeader != "" {
+				parts := strings.Split(authHeader, " ")
+				if len(parts) == 2 && parts[0] == "Bearer" {
+					tokenString = parts[1]
+				}
+			}
+
+			// 2. Se não achou no Header, tenta pegar da Query String (Para WebSocket)
+			// Isso é necessário porque o JS no browser não envia header no handshake
+			if tokenString == "" {
+				tokenString = r.URL.Query().Get("token")
+			}
+
+			// 3. Se ainda estiver vazio, erro
+			if tokenString == "" {
+				http.Error(w, "Authorization header or token query param required", http.StatusUnauthorized)
 				return
 			}
 
-			parts := strings.Split(authHeader, " ")
-			if len(parts) != 2 || parts[0] != "Bearer" {
-				http.Error(w, "Authorization header format must be Bearer {token}", http.StatusUnauthorized)
-				return
-			}
-
-			tokenString := parts[1]
-
-			// 🚨 NOVO: Verificar Blacklist no Redis
+			// 🚨 Verificar Blacklist no Redis (Código existente mantido)
 			ctx := r.Context()
 			blacklistKey := fmt.Sprintf("blacklist:%s", tokenString)
 			exists, err := redisClient.Exists(ctx, blacklistKey).Result()
-
-			// Se der erro no Redis, logamos mas não bloqueamos necessariamente (fail open vs fail close)
-			// Aqui vamos assumir Fail Secure: se Redis falhar ou chave existir, bloqueia.
 			if err == nil && exists > 0 {
 				http.Error(w, "Token revoked (logout)", http.StatusUnauthorized)
 				return
@@ -52,7 +58,6 @@ func AuthMiddleware(jwtSecret string, redisClient *redis.Client) func(http.Handl
 				return
 			}
 
-			// Adicionar claims ao context
 			userCtx := context.WithValue(r.Context(), UserContextKey, claims)
 			next.ServeHTTP(w, r.WithContext(userCtx))
 		})

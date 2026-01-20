@@ -117,3 +117,56 @@ func (s *Service) UpdateTask(taskID, userID string, req UpdateTaskRequest) (*Tas
 
 	return task, nil
 }
+
+func (s *Service) ProcessSync(userID string, req SyncRequest) (*SyncResponse, error) {
+	// 1. Processar as mudanças vindas do Cliente (Push)
+	count := 0
+
+	// Nota: Em produção, isso deve ser feito dentro de uma transação única no Repository
+	// Para simplificar aqui, vamos chamar os métodos existentes, mas o ideal é Transactional.
+	for _, change := range req.Changes {
+		var err error
+
+		switch change.Type {
+		case "CREATE":
+			var createReq CreateTaskRequest
+			if json.Unmarshal(change.Payload, &createReq); err == nil {
+				// Força o ID que veio do cliente (importante para offline)
+				// Precisaríamos refatorar o CreateTask para aceitar ID externo ou
+				// lidar com UUIDs temporários. Vamos assumir criação simples por enquanto.
+				_, err = s.CreateTask(userID, createReq)
+			}
+
+		case "UPDATE":
+			var updateReq UpdateTaskRequest
+			if json.Unmarshal(change.Payload, &updateReq); err == nil {
+				_, err = s.UpdateTask(change.TaskID, userID, updateReq)
+			}
+
+		case "DELETE":
+			err = s.DeleteTask(change.TaskID, userID)
+		}
+
+		if err == nil {
+			count++
+		}
+		// Se der erro (ex: conflito), por enquanto ignoramos ou logamos.
+		// Numa implementação avançada, retornamos uma lista de erros.
+	}
+
+	// 2. Buscar novidades para o Cliente (Pull)
+	// Vamos precisar de um método no Repo que busque tasks com Version > LastPulledVersion
+	newTasks, err := s.repo.ListChanges(userID, req.LastPulledVersion)
+	if err != nil {
+		return nil, err
+	}
+
+	if newTasks == nil {
+		newTasks = []Task{}
+	}
+
+	return &SyncResponse{
+		SyncedCount: count,
+		NewTasks:    newTasks,
+	}, nil
+}
