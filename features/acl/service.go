@@ -3,6 +3,7 @@ package acl
 import (
 	"errors"
 	"fmt"
+	"log"
 
 	pkgacl "loginbackend/pkg/acl"
 )
@@ -90,8 +91,11 @@ func (s *Service) Share(userID string, req ShareRequest) error {
 		}
 
 		if err := s.repo.GrantACL(acl); err != nil {
+			log.Printf("❌ Erro ao salvar ACL: %v", err)
 			return err
 		}
+		log.Printf("✅ ACL salva: resource=%s, grantee=%s, perms=%d",
+			acl.ResourceID, *acl.GranteeID, acl.Permissions)
 	}
 
 	return nil
