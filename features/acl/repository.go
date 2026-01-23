@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strconv"
 
 	pkgacl "loginbackend/pkg/acl"
 )
@@ -104,6 +105,23 @@ func (r *Repository) GetACL(resourceID string, resourceType pkgacl.ResourceType)
 
 // RevokeACL remove permissões
 func (r *Repository) RevokeACL(resourceID string, resourceType pkgacl.ResourceType, granteeID *string, granteeType pkgacl.GranteeType) error {
+	// 1. SEGURANÇA: Validação de Tipo
+	// Tentamos converter a string para int64. Se falhar, nem chamamos o banco.
+	resourceIDInt, err := strconv.ParseInt(resourceID, 10, 64)
+	if err != nil {
+		return fmt.Errorf("resource_id inválido (deve ser numérico): %w", err)
+	}
+
+	// Opcional: Se granteeID não for nulo, validar ele também
+	var granteeIDInt *int64
+	if granteeID != nil {
+		val, err := strconv.ParseInt(*granteeID, 10, 64)
+		if err != nil {
+			return fmt.Errorf("grantee_id inválido: %w", err)
+		}
+		granteeIDInt = &val
+	}
+
 	query := `
 		DELETE FROM acls
 		WHERE resource_id = $1 
@@ -112,8 +130,23 @@ func (r *Repository) RevokeACL(resourceID string, resourceType pkgacl.ResourceTy
 		  AND (grantee_id = $4 OR ($4 IS NULL AND grantee_id IS NULL))
 	`
 
-	_, err := r.db.Exec(query, resourceID, resourceType, granteeType, granteeID)
-	return err
+	// 2. ATOMICIDADE: O comando DELETE é atômico por natureza no Postgres.
+	// Passamos o resourceIDInt (int64) em vez da string.
+	result, err := r.db.Exec(query, resourceIDInt, resourceType, granteeType, granteeIDInt)
+
+	if err != nil {
+		return fmt.Errorf("erro ao revogar permissão: %w", err)
+	}
+
+	// 3. Verificação (Opcional, mas boa prática)
+	// Se quiser saber se alguém realmente perdeu acesso:
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		// Não é erro, mas pode ser útil para logar que nada mudou
+		// return fmt.Errorf("nenhuma permissão encontrada para revogar")
+	}
+
+	return nil
 }
 
 // CheckPermission verifica se usuário tem permissão
