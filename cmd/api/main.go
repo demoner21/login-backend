@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"loginbackend/config"
+	"loginbackend/features/acl"
 	"loginbackend/features/auth"
 	"loginbackend/features/shared/models"
 	"loginbackend/features/tasks"
@@ -106,6 +107,16 @@ func main() {
 	r.Route(usersPath, usersRoutes)
 
 	// ======================================================
+	// ACL Feature (Acess Control Layer + bitmask)
+	// ======================================================
+	aclRepo := acl.NewRepository(db)
+	aclService := acl.NewService(aclRepo)
+	aclHandler := acl.NewHandler(aclService)
+
+	aclPath, aclRoutes := acl.Routes(aclHandler, cfg.JWTSecret, redisClient)
+	r.Route(aclPath, aclRoutes)
+
+	// ======================================================
 	// Tasks Feature (HTTP + WebSocket)
 	// ======================================================
 	tasksRepo := tasks.NewRepository(db)
@@ -116,6 +127,7 @@ func main() {
 		tasksHandler,
 		cfg.JWTSecret,
 		redisClient,
+		aclService,
 	)
 	r.Route(tasksPath, tasksRoutes)
 
