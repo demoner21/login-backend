@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"loginbackend/internal/http/middleware"
+	httpresponse "loginbackend/internal/http/response"
 	pkgacl "loginbackend/pkg/acl"
 
 	"github.com/go-chi/chi/v5"
@@ -27,12 +28,6 @@ func NewHandler(service *Service) *Handler {
 	}
 }
 
-type Response struct {
-	Message string      `json:"message,omitempty"`
-	Data    interface{} `json:"data,omitempty"`
-	Error   string      `json:"error,omitempty"`
-}
-
 // GrantACL
 // @Summary Criar ou atualizar ACL
 // @Description Concede permissões para um recurso
@@ -53,24 +48,24 @@ func (h *Handler) GrantACL(w http.ResponseWriter, r *http.Request) {
 	var req GrantACLRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(Response{Error: "JSON inválido"})
+		json.NewEncoder(w).Encode(httpresponse.Response{Error: "JSON inválido"})
 		return
 	}
 
 	if err := h.validate.Struct(req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(Response{Error: err.Error()})
+		json.NewEncoder(w).Encode(httpresponse.Response{Error: err.Error()})
 		return
 	}
 
 	if err := h.service.GrantAccess(claims.UserID, req); err != nil {
 		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(Response{Error: err.Error()})
+		json.NewEncoder(w).Encode(httpresponse.Response{Error: err.Error()})
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(Response{Message: "Permissão concedida"})
+	json.NewEncoder(w).Encode(httpresponse.Response{Message: "Permissão concedida"})
 }
 
 // ShareResource
@@ -93,24 +88,24 @@ func (h *Handler) ShareResource(w http.ResponseWriter, r *http.Request) {
 	var req ShareRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(Response{Error: "JSON inválido"})
+		json.NewEncoder(w).Encode(httpresponse.Response{Error: "JSON inválido"})
 		return
 	}
 
 	if err := h.validate.Struct(req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(Response{Error: err.Error()})
+		json.NewEncoder(w).Encode(httpresponse.Response{Error: err.Error()})
 		return
 	}
 
 	if err := h.service.Share(claims.UserID, req); err != nil {
 		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(Response{Error: err.Error()})
+		json.NewEncoder(w).Encode(httpresponse.Response{Error: err.Error()})
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(Response{Message: "Recurso compartilhado com sucesso"})
+	json.NewEncoder(w).Encode(httpresponse.Response{Message: "Recurso compartilhado com sucesso"})
 }
 
 // GetACL
@@ -135,19 +130,19 @@ func (h *Handler) GetACL(w http.ResponseWriter, r *http.Request) {
 
 	if resourceID == "" || resourceType == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(Response{Error: "resource_id e resource_type obrigatórios"})
+		json.NewEncoder(w).Encode(httpresponse.Response{Error: "resource_id e resource_type obrigatórios"})
 		return
 	}
 
 	acls, err := h.service.GetResourceACL(claims.UserID, resourceID, resourceType)
 	if err != nil {
 		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(Response{Error: err.Error()})
+		json.NewEncoder(w).Encode(httpresponse.Response{Error: err.Error()})
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(Response{Data: acls})
+	json.NewEncoder(w).Encode(httpresponse.Response{Data: acls})
 }
 
 // RevokeACL
@@ -181,18 +176,18 @@ func (h *Handler) RevokeACL(w http.ResponseWriter, r *http.Request) {
 
 	if resourceID == "" || resourceType == "" || granteeType == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(Response{Error: "parâmetros obrigatórios faltando"})
+		json.NewEncoder(w).Encode(httpresponse.Response{Error: "parâmetros obrigatórios faltando"})
 		return
 	}
 
 	if err := h.service.RevokeAccess(claims.UserID, resourceID, resourceType, granteeID, granteeType); err != nil {
 		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(Response{Error: err.Error()})
+		json.NewEncoder(w).Encode(httpresponse.Response{Error: err.Error()})
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(Response{Message: "Permissão revogada"})
+	json.NewEncoder(w).Encode(httpresponse.Response{Message: "Permissão revogada"})
 }
 
 // ListSharedWithMe
@@ -220,12 +215,12 @@ func (h *Handler) ListSharedWithMe(w http.ResponseWriter, r *http.Request) {
 	resources, err := h.service.ListSharedWithMe(claims.UserID, resourceType)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(Response{Error: err.Error()})
+		json.NewEncoder(w).Encode(httpresponse.Response{Error: err.Error()})
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(Response{Data: resources})
+	json.NewEncoder(w).Encode(httpresponse.Response{Data: resources})
 }
 
 // ListSharedByMe
@@ -253,10 +248,10 @@ func (h *Handler) ListSharedByMe(w http.ResponseWriter, r *http.Request) {
 	resources, err := h.service.ListSharedByMe(claims.UserID, resourceType)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(Response{Error: err.Error()})
+		json.NewEncoder(w).Encode(httpresponse.Response{Error: err.Error()})
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(Response{Data: resources})
+	json.NewEncoder(w).Encode(httpresponse.Response{Data: resources})
 }

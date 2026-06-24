@@ -3,6 +3,7 @@ package users
 import (
 	"encoding/json"
 	"loginbackend/config"
+	httpresponse "loginbackend/internal/http/response"
 	"loginbackend/pkg/uploader"
 	"net/http"
 
@@ -17,12 +18,6 @@ func NewHandler(service *Service) *Handler {
 	return &Handler{service: service}
 }
 
-type Response struct {
-	Message string      `json:"message,omitempty"`
-	Data    interface{} `json:"data,omitempty"`
-	Error   string      `json:"error,omitempty"`
-}
-
 func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	var req CreateUserRequest
 
@@ -35,13 +30,13 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(Response{Error: err.Error()})
+		json.NewEncoder(w).Encode(httpresponse.Response{Error: err.Error()})
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(Response{
+	json.NewEncoder(w).Encode(httpresponse.Response{
 		Message: "usuário criado com sucesso",
 		Data:    user,
 	})
@@ -52,12 +47,12 @@ func (h *Handler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(Response{Error: "erro ao listar usuários"})
+		json.NewEncoder(w).Encode(httpresponse.Response{Error: "erro ao listar usuários"})
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(Response{Data: users})
+	json.NewEncoder(w).Encode(httpresponse.Response{Data: users})
 }
 
 func (h *Handler) GetUser(w http.ResponseWriter, r *http.Request) {
@@ -68,12 +63,12 @@ func (h *Handler) GetUser(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
-		json.NewEncoder(w).Encode(Response{Error: err.Error()})
+		json.NewEncoder(w).Encode(httpresponse.Response{Error: err.Error()})
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(Response{Data: user})
+	json.NewEncoder(w).Encode(httpresponse.Response{Data: user})
 }
 
 func (h *Handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
@@ -91,12 +86,12 @@ func (h *Handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(Response{Error: err.Error()})
+		json.NewEncoder(w).Encode(httpresponse.Response{Error: err.Error()})
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(Response{
+	json.NewEncoder(w).Encode(httpresponse.Response{
 		Message: "usuário atualizado com sucesso",
 		Data:    user,
 	})
@@ -109,12 +104,12 @@ func (h *Handler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	if err := h.service.Delete(userID); err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(Response{Error: err.Error()})
+		json.NewEncoder(w).Encode(httpresponse.Response{Error: err.Error()})
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(Response{Message: "usuário deletado com sucesso"})
+	json.NewEncoder(w).Encode(httpresponse.Response{Message: "usuário deletado com sucesso"})
 }
 
 func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
@@ -135,13 +130,13 @@ func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	if err := h.service.ChangePassword(userID, req); err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest) // Ou 401/403 dependendo do erro, mas 400 serve
-		json.NewEncoder(w).Encode(Response{Error: err.Error()})
+		json.NewEncoder(w).Encode(httpresponse.Response{Error: err.Error()})
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(Response{Message: "Senha alterada com sucesso"})
+	json.NewEncoder(w).Encode(httpresponse.Response{Message: "Senha alterada com sucesso"})
 }
 
 // UploadAvatar
@@ -183,7 +178,7 @@ func (h *Handler) UploadAvatar(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(Response{
+	json.NewEncoder(w).Encode(httpresponse.Response{
 		Message: "Avatar atualizado",
 		Data:    updatedUser,
 	})

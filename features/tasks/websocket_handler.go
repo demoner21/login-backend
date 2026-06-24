@@ -8,6 +8,7 @@ import (
 	"time"
 
 	// Alias IMPORTANTE:
+	httpresponse "loginbackend/internal/http/response"
 	ws "loginbackend/internal/websocket"
 
 	"github.com/go-chi/chi/v5"
@@ -28,12 +29,6 @@ type Handler struct {
 	service  *Service
 	hub      *ws.Hub
 	validate *validator.Validate
-}
-
-type Response struct {
-	Message string      `json:"message,omitempty"`
-	Data    interface{} `json:"data,omitempty"`
-	Error   string      `json:"error,omitempty"`
 }
 
 func NewHandler(service *Service, hub *ws.Hub) *Handler {
@@ -74,7 +69,7 @@ func (h *Handler) CreateTask(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(Response{Error: err.Error()})
+		json.NewEncoder(w).Encode(httpresponse.Response{Error: err.Error()})
 		return
 	}
 
@@ -90,7 +85,7 @@ func (h *Handler) CreateTask(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(Response{
+	json.NewEncoder(w).Encode(httpresponse.Response{
 		Message: "Tarefa criada com sucesso",
 		Data:    task,
 	})
@@ -214,12 +209,12 @@ func (h *Handler) ListTasks(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(Response{Error: err.Error()})
+		json.NewEncoder(w).Encode(httpresponse.Response{Error: err.Error()})
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(Response{Data: tasks})
+	json.NewEncoder(w).Encode(httpresponse.Response{Data: tasks})
 }
 
 // DeleteTask remove uma tarefa (soft delete)
@@ -244,7 +239,7 @@ func (h *Handler) DeleteTask(w http.ResponseWriter, r *http.Request) {
 	taskID := chi.URLParam(r, "id")
 	if taskID == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(Response{Error: "ID da tarefa é obrigatório"})
+		json.NewEncoder(w).Encode(httpresponse.Response{Error: "ID da tarefa é obrigatório"})
 		return
 	}
 
@@ -255,7 +250,7 @@ func (h *Handler) DeleteTask(w http.ResponseWriter, r *http.Request) {
 		// Para simplificar, retornamos 404/403 mascarado ou 500
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest) // Ou NotFound dependendo da lógica exata do erro
-		json.NewEncoder(w).Encode(Response{Error: err.Error()})
+		json.NewEncoder(w).Encode(httpresponse.Response{Error: err.Error()})
 		return
 	}
 
@@ -269,7 +264,7 @@ func (h *Handler) DeleteTask(w http.ResponseWriter, r *http.Request) {
 	h.hub.Broadcast <- msg
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(Response{Message: "Tarefa removida com sucesso"})
+	json.NewEncoder(w).Encode(httpresponse.Response{Message: "Tarefa removida com sucesso"})
 }
 
 // UpdateTask atualiza uma tarefa existente
@@ -295,28 +290,28 @@ func (h *Handler) UpdateTask(w http.ResponseWriter, r *http.Request) {
 	taskID := chi.URLParam(r, "id")
 	if taskID == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(Response{Error: "ID obrigatório"})
+		json.NewEncoder(w).Encode(httpresponse.Response{Error: "ID obrigatório"})
 		return
 	}
 
 	var req UpdateTaskRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(Response{Error: "JSON inválido"})
+		json.NewEncoder(w).Encode(httpresponse.Response{Error: "JSON inválido"})
 		return
 	}
 
 	// Validação
 	if err := h.validate.Struct(req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(Response{Error: err.Error()})
+		json.NewEncoder(w).Encode(httpresponse.Response{Error: err.Error()})
 		return
 	}
 
 	updatedTask, err := h.service.UpdateTask(taskID, claims.UserID, req)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(Response{Error: err.Error()})
+		json.NewEncoder(w).Encode(httpresponse.Response{Error: err.Error()})
 		return
 	}
 
@@ -331,7 +326,7 @@ func (h *Handler) UpdateTask(w http.ResponseWriter, r *http.Request) {
 	h.hub.Broadcast <- msg
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(Response{
+	json.NewEncoder(w).Encode(httpresponse.Response{
 		Message: "Tarefa atualizada",
 		Data:    updatedTask,
 	})
@@ -358,17 +353,17 @@ func (h *Handler) SyncTasks(w http.ResponseWriter, r *http.Request) {
 	var req SyncRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(Response{Error: "JSON inválido"})
+		json.NewEncoder(w).Encode(httpresponse.Response{Error: "JSON inválido"})
 		return
 	}
 
 	resp, err := h.service.ProcessSync(claims.UserID, req)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(Response{Error: err.Error()})
+		json.NewEncoder(w).Encode(httpresponse.Response{Error: err.Error()})
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(Response{Data: resp})
+	json.NewEncoder(w).Encode(httpresponse.Response{Data: resp})
 }
