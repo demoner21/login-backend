@@ -25,7 +25,16 @@ type CreateTaskRequest struct {
 	Title       string     `json:"title" validate:"required,min=3"`
 	Description string     `json:"description"`
 	Priority    string     `json:"priority" validate:"oneof=Low Medium High"`
-	DueDate     *time.Time `json:"due_date" example:"2026-01-20T15:00:00Z"` // NOVO CAMPO
+	DueDate     *time.Time `json:"due_date"`
+	SharedWith  []string   `json:"shared_with,omitempty" validate:"omitempty,dive,email"`
+}
+
+// CreateTaskResult é o retorno de CreateTask. ShareWarnings traz falhas
+// pontuais de compartilhamento (email não encontrado, etc) sem
+// impedir a criação da tarefa em si.
+type CreateTaskResult struct {
+	Task          Task     `json:"task"`
+	ShareWarnings []string `json:"share_warnings,omitempty"`
 }
 
 // TaskEvent mapeia a tabela 'task_events'

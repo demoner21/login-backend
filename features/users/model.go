@@ -42,3 +42,12 @@ type UserResponse struct {
 	CreatedAt   time.Time  `json:"created_at"`
 	LastLoginAt *time.Time `json:"last_login_at,omitempty"`
 }
+
+// UserSearchResult é a versão pública/segura do usuário, usada em
+// buscas para compartilhamento. Nunca expõe email completo de terceiros
+// para evitar enumeração — só confirma o que o buscador já sabe.
+type UserSearchResult struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Email string `json:"email"`
+}

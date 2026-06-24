@@ -369,3 +369,29 @@ func (r *Repository) UpdateAvatar(userID, avatarURL string) error {
 	_, err := r.db.Exec(query, avatarURL, userID)
 	return err
 }
+
+// SearchByEmail busca usuários ativos por email exato ou prefixo.
+// Limitado a 10 resultados para evitar enumeração de base de usuários.
+func (r *Repository) SearchByEmail(query string) ([]UserSearchResult, error) {
+	rows, err := r.db.Query(`
+		SELECT id, name, email 
+		FROM users 
+		WHERE is_active = true AND email ILIKE $1
+		ORDER BY email ASC
+		LIMIT 10
+	`, query+"%")
+	if err != nil {
+		return nil, fmt.Errorf("erro ao buscar usuários: %w", err)
+	}
+	defer rows.Close()
+
+	var results []UserSearchResult
+	for rows.Next() {
+		var u UserSearchResult
+		if err := rows.Scan(&u.ID, &u.Name, &u.Email); err != nil {
+			return nil, err
+		}
+		results = append(results, u)
+	}
+	return results, nil
+}

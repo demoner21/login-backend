@@ -18,6 +18,9 @@ func Routes(handler *Handler, jwtSecret string, redisClient *redis.Client) (stri
 			// Middleware de Autenticação
 			r.Use(middleware.AuthMiddleware(jwtSecret, redisClient))
 
+			// Busca para compartilhamento — qualquer usuário autenticado
+			r.Get("/search", handler.SearchUsers)
+
 			// A) LISTAGEM GERAL: Apenas Admins (opcional, ou aberto a todos dependendo da regra)
 			// Vamos manter restrito a Admin para evitar vazamento de base
 			r.With(middleware.RequireRole(1)).Get("/", handler.ListUsers)

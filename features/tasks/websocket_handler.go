@@ -195,9 +195,14 @@ func (h *Handler) writePump(client *ws.Client) {
 // @Tags tasks
 // @Produce json
 // @Security BearerAuth
-// @Success 200 {object} Response{data=[]Task}
+// @Success 200 {object} Response{data=[]TaskWithOwnership}
 // @Failure 500 {object} Response
 // @Router /tasks [get]
+type TaskWithOwnership struct {
+	Task
+	IsOwner bool `json:"is_owner"`
+}
+
 func (h *Handler) ListTasks(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.GetUserFromContext(r.Context())
 	if claims == nil {
@@ -213,8 +218,13 @@ func (h *Handler) ListTasks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	enriched := make([]TaskWithOwnership, len(tasks))
+	for i, t := range tasks {
+		enriched[i] = TaskWithOwnership{Task: t, IsOwner: t.OwnerID == claims.UserID}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(httpresponse.Response{Data: tasks})
+	json.NewEncoder(w).Encode(httpresponse.Response{Data: enriched})
 }
 
 // DeleteTask remove uma tarefa (soft delete)

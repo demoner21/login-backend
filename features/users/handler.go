@@ -183,3 +183,27 @@ func (h *Handler) UploadAvatar(w http.ResponseWriter, r *http.Request) {
 		Data:    updatedUser,
 	})
 }
+
+// SearchUsers
+// @Summary Buscar usuários por email
+// @Description Busca usuários ativos por prefixo de email (para compartilhamento)
+// @Tags users
+// @Produce json
+// @Security BearerAuth
+// @Param q query string true "Prefixo do email (mínimo 3 caracteres)"
+// @Success 200 {object} Response{data=[]UserSearchResult}
+// @Router /users/search [get]
+func (h *Handler) SearchUsers(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query().Get("q")
+
+	results, err := h.service.Search(query)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(httpresponse.Response{Error: err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(httpresponse.Response{Data: results})
+}

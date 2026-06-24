@@ -67,15 +67,26 @@ func (r *Repository) Create(task Task) error {
 	return tx.Commit()
 }
 
+// List retorna tarefas onde o usuário é owner OU tem ACL ativa
+// (compartilhada com ele diretamente).
 func (r *Repository) List(userID string) ([]Task, error) {
-	// Busca tarefas onde o usuário é dono OU (opcional) faz parte do time
 	query := `
-        SELECT id, title, description, priority, status, owner_id, 
-               version, vector_clock, created_at, updated_at, due_date
-        FROM tasks 
-        WHERE owner_id = $1 AND deleted_at IS NULL
-        ORDER BY created_at DESC
-    `
+		SELECT id, title, description, priority, status, owner_id, 
+		       version, vector_clock, created_at, updated_at, due_date
+		FROM tasks 
+		WHERE deleted_at IS NULL
+		  AND (
+		    owner_id = $1
+		    OR id IN (
+		        SELECT (resource_id)::bigint FROM acls
+		        WHERE resource_type = 'TASK'
+		          AND grantee_type = 'USER'
+		          AND grantee_id = $1
+		          AND (expires_at IS NULL OR expires_at > NOW())
+		    )
+		  )
+		ORDER BY created_at DESC
+	`
 
 	rows, err := r.db.Query(query, userID)
 	if err != nil {
@@ -87,13 +98,17 @@ func (r *Repository) List(userID string) ([]Task, error) {
 	for rows.Next() {
 		var t Task
 		var vectorClockBytes []byte // Para ler o JSONB do banco
+		var dueDate sql.NullTime
 
 		err := rows.Scan(
 			&t.ID, &t.Title, &t.Description, &t.Priority, &t.Status, &t.OwnerID,
-			&t.Version, &vectorClockBytes, &t.CreatedAt, &t.UpdatedAt, &t.DueDate,
+			&t.Version, &vectorClockBytes, &t.CreatedAt, &t.UpdatedAt, &dueDate,
 		)
 		if err != nil {
 			return nil, err
+		}
+		if dueDate.Valid {
+			t.DueDate = &dueDate.Time
 		}
 
 		// Converter bytes de volta para JSON RawMessage

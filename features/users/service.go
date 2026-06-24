@@ -200,3 +200,10 @@ func (s *Service) UpdateAvatar(userID, avatarURL string) (*models.User, error) {
 	user.AvatarURL = &avatarURL
 	return user, nil
 }
+
+func (s *Service) Search(query string) ([]UserSearchResult, error) {
+	if len(query) < 3 {
+		return nil, errors.New("digite ao menos 3 caracteres para buscar")
+	}
+	return s.repo.SearchByEmail(query)
+}
