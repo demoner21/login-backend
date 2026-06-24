@@ -120,7 +120,7 @@ func main() {
 	// Tasks Feature (HTTP + WebSocket)
 	// ======================================================
 	tasksRepo := tasks.NewRepository(db)
-	tasksService := tasks.NewService(tasksRepo)
+	tasksService := tasks.NewService(tasksRepo, usersService, aclService)
 	tasksHandler := tasks.NewHandler(tasksService, hub)
 
 	tasksPath, tasksRoutes := tasks.Routes(

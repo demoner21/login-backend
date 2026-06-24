@@ -190,3 +190,19 @@ func (s *Service) UpdatePermissions(userID string, resourceID string, resourceTy
 
 	return s.repo.GrantACL(acl)
 }
+
+// GrantTaskAccess concede acesso diretamente, sem passar pelas validações
+// de "quem pode compartilhar" — usado por outros módulos (ex: tasks) no
+// momento da criação do próprio recurso, quando o concedente é
+// necessariamente o owner recém-criado.
+func (s *Service) GrantTaskAccess(grantedBy, resourceID, granteeUserID string, permissions pkgacl.Permission) error {
+	acl := ACL{
+		ResourceID:   resourceID,
+		ResourceType: pkgacl.ResourceTask,
+		GranteeType:  pkgacl.GranteeUser,
+		GranteeID:    &granteeUserID,
+		Permissions:  permissions,
+		GrantedBy:    grantedBy,
+	}
+	return s.repo.GrantACL(acl)
+}

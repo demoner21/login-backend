@@ -3,19 +3,35 @@ package tasks
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
+	pkgacl "loginbackend/pkg/acl"
 	"loginbackend/pkg/utils"
 	"time"
 )
 
+// UserResolver é o necessário de 'users' para resolver email -> ID.
+// Mantido como interface mínima para não acoplar tasks a users.Service inteiro.
+type UserResolver interface {
+	FindIDByEmail(email string) (userID string, found bool, err error)
+}
+
+// ACLGranter é o necessário de 'acl' para conceder acesso direto,
+// sem que tasks precise conhecer GrantACLRequest ou regras de share.
+type ACLGranter interface {
+	GrantTaskAccess(grantedBy, resourceID, granteeUserID string, permissions pkgacl.Permission) error
+}
+
 type Service struct {
-	repo *Repository
+	repo         *Repository
+	userResolver UserResolver
+	aclGranter   ACLGranter
 }
 
-func NewService(repo *Repository) *Service {
-	return &Service{repo: repo}
+func NewService(repo *Repository, userResolver UserResolver, aclGranter ACLGranter) *Service {
+	return &Service{repo: repo, userResolver: userResolver, aclGranter: aclGranter}
 }
 
-func (s *Service) CreateTask(userID string, req CreateTaskRequest) (*Task, error) {
+func (s *Service) CreateTask(userID string, req CreateTaskRequest) (*CreateTaskResult, error) {
 	// Validações básicas (pode usar validator library aqui)
 
 	// Gera Snowflake ID
@@ -43,7 +59,32 @@ func (s *Service) CreateTask(userID string, req CreateTaskRequest) (*Task, error
 		return nil, err
 	}
 
-	return &task, nil
+	result := &CreateTaskResult{Task: task}
+
+	for _, email := range req.SharedWith {
+		granteeID, found, err := s.userResolver.FindIDByEmail(email)
+		if err != nil {
+			result.ShareWarnings = append(result.ShareWarnings, fmt.Sprintf("%s: erro ao buscar usuário", email))
+			continue
+		}
+		if !found {
+			result.ShareWarnings = append(result.ShareWarnings, fmt.Sprintf("%s: usuário não encontrado", email))
+			continue
+		}
+		if granteeID == userID {
+			result.ShareWarnings = append(result.ShareWarnings, fmt.Sprintf("%s: você não pode compartilhar consigo mesmo", email))
+			continue
+		}
+
+		// Padrão ao compartilhar na criação: somente leitura.
+		// Para conceder edição, o owner usa o modal de compartilhar
+		// (ShareTaskModal) já com a tarefa criada.
+		if err := s.aclGranter.GrantTaskAccess(userID, taskID, granteeID, pkgacl.PermissionRead); err != nil {
+			result.ShareWarnings = append(result.ShareWarnings, fmt.Sprintf("%s: erro ao compartilhar", email))
+		}
+	}
+
+	return result, nil
 }
 
 // ListTasks chama o repositório para listar

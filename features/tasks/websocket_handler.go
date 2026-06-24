@@ -65,7 +65,14 @@ func (h *Handler) CreateTask(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Chama Service
-	task, err := h.service.CreateTask(claims.UserID, req)
+	if err := h.validate.Struct(req); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(httpresponse.Response{Error: err.Error()})
+		return
+	}
+
+	result, err := h.service.CreateTask(claims.UserID, req)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
@@ -76,8 +83,8 @@ func (h *Handler) CreateTask(w http.ResponseWriter, r *http.Request) {
 	// Broadcast via WebSocket (usando o Hub exportado)
 	msg := &ws.Message{
 		Type:      "task_created",
-		TaskID:    task.ID,
-		Payload:   json.RawMessage(`{"title":"` + task.Title + `"}`),
+		TaskID:    result.Task.ID,
+		Payload:   json.RawMessage(`{"title":"` + result.Task.Title + `"}`),
 		UserID:    claims.UserID,
 		Timestamp: time.Now().Format(time.RFC3339),
 	}
@@ -87,7 +94,7 @@ func (h *Handler) CreateTask(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(httpresponse.Response{
 		Message: "Tarefa criada com sucesso",
-		Data:    task,
+		Data:    result,
 	})
 }
 

@@ -207,3 +207,18 @@ func (s *Service) Search(query string) ([]UserSearchResult, error) {
 	}
 	return s.repo.SearchByEmail(query)
 }
+
+// FindIDByEmail resolve um email para o ID do usuário, usado por
+// outros módulos (ex: tasks) ao compartilhar recursos por email.
+// Retorna found=false se não existir ou estiver inativo — nunca erro
+// nesse caso, para não expor diferença entre "não existe" e "inativo".
+func (s *Service) FindIDByEmail(email string) (string, bool, error) {
+	user, err := s.repo.FindByEmail(email)
+	if err != nil {
+		return "", false, fmt.Errorf("erro ao buscar usuário: %w", err)
+	}
+	if user == nil || !user.IsActive {
+		return "", false, nil
+	}
+	return user.ID, true, nil
+}
