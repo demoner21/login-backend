@@ -64,7 +64,6 @@ func (h *Handler) CreateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Chama Service
 	if err := h.validate.Struct(req); err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
@@ -80,15 +79,29 @@ func (h *Handler) CreateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Broadcast via WebSocket (usando o Hub exportado)
-	msg := &ws.Message{
+	now := time.Now().Format(time.RFC3339)
+
+	// Notifica quem está olhando o dashboard (room da task), se houver
+	h.hub.Broadcast <- &ws.Message{
 		Type:      "task_created",
 		TaskID:    result.Task.ID,
 		Payload:   json.RawMessage(`{"title":"` + result.Task.Title + `"}`),
 		UserID:    claims.UserID,
-		Timestamp: time.Now().Format(time.RFC3339),
+		Timestamp: now,
 	}
-	h.hub.Broadcast <- msg
+
+	// Notifica cada destinatário de compartilhamento, em tempo real,
+	// independente de já terem aberto a tarefa ou não — o Hub roteia
+	// por UserID diretamente, sem precisar de join_room.
+	for _, recipientID := range result.SharedUserIDs {
+		h.hub.Broadcast <- &ws.Message{
+			Type:      "task_shared",
+			TaskID:    result.Task.ID,
+			Payload:   json.RawMessage(`{"granted_by":"` + claims.UserID + `"}`),
+			UserID:    recipientID,
+			Timestamp: now,
+		}
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)

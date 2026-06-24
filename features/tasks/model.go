@@ -35,6 +35,7 @@ type CreateTaskRequest struct {
 type CreateTaskResult struct {
 	Task          Task     `json:"task"`
 	ShareWarnings []string `json:"share_warnings,omitempty"`
+	SharedUserIDs []string `json:"-"` // uso interno do handler para broadcast, não vai pro JSON
 }
 
 // TaskEvent mapeia a tabela 'task_events'

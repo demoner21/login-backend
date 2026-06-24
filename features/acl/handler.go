@@ -6,7 +6,9 @@ import (
 
 	"loginbackend/internal/http/middleware"
 	httpresponse "loginbackend/internal/http/response"
+	ws "loginbackend/internal/websocket"
 	pkgacl "loginbackend/pkg/acl"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
@@ -19,12 +21,32 @@ import (
 type Handler struct {
 	service  *Service
 	validate *validator.Validate
+	hub      *ws.Hub
 }
 
-func NewHandler(service *Service) *Handler {
+func NewHandler(service *Service, hub *ws.Hub) *Handler {
 	return &Handler{
 		service:  service,
 		validate: validator.New(),
+		hub:      hub,
+	}
+}
+
+// notifyShare envia um evento task_shared em tempo real para o
+// destinatário, quando o recurso compartilhado for uma TASK.
+// Outros tipos de recurso (FARM_AREA, TEAM, DOCUMENT) ainda não têm
+// consumidor no frontend, então o evento fica restrito a TASK por ora.
+func (h *Handler) notifyShare(resourceType pkgacl.ResourceType, resourceID string, granteeType pkgacl.GranteeType, granteeID *string, grantedBy string) {
+	if resourceType != pkgacl.ResourceTask || granteeType != pkgacl.GranteeUser || granteeID == nil {
+		return
+	}
+
+	h.hub.Broadcast <- &ws.Message{
+		Type:      "task_shared",
+		TaskID:    resourceID,
+		Payload:   json.RawMessage(`{"granted_by":"` + grantedBy + `"}`),
+		UserID:    *granteeID,
+		Timestamp: time.Now().Format(time.RFC3339),
 	}
 }
 
@@ -64,6 +86,8 @@ func (h *Handler) GrantACL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.notifyShare(req.ResourceType, req.ResourceID, req.GranteeType, req.GranteeID, claims.UserID)
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(httpresponse.Response{Message: "Permissão concedida"})
 }
@@ -102,6 +126,10 @@ func (h *Handler) ShareResource(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusForbidden)
 		json.NewEncoder(w).Encode(httpresponse.Response{Error: err.Error()})
 		return
+	}
+
+	for _, target := range req.ShareWith {
+		h.notifyShare(req.ResourceType, req.ResourceID, target.Type, target.ID, claims.UserID)
 	}
 
 	w.Header().Set("Content-Type", "application/json")

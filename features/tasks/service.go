@@ -81,7 +81,10 @@ func (s *Service) CreateTask(userID string, req CreateTaskRequest) (*CreateTaskR
 		// (ShareTaskModal) já com a tarefa criada.
 		if err := s.aclGranter.GrantTaskAccess(userID, taskID, granteeID, pkgacl.PermissionRead); err != nil {
 			result.ShareWarnings = append(result.ShareWarnings, fmt.Sprintf("%s: erro ao compartilhar", email))
+			continue
 		}
+
+		result.SharedUserIDs = append(result.SharedUserIDs, granteeID)
 	}
 
 	return result, nil

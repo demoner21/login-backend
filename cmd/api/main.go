@@ -111,7 +111,7 @@ func main() {
 	// ======================================================
 	aclRepo := acl.NewRepository(db)
 	aclService := acl.NewService(aclRepo)
-	aclHandler := acl.NewHandler(aclService)
+	aclHandler := acl.NewHandler(aclService, hub)
 
 	aclPath, aclRoutes := acl.Routes(aclHandler, cfg.JWTSecret, redisClient)
 	r.Route(aclPath, aclRoutes)
