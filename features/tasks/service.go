@@ -63,13 +63,14 @@ func (s *Service) ListTasks(userID string) ([]Task, error) {
 
 // DeleteTask chama o repositório para deletar
 func (s *Service) DeleteTask(taskID, userID string) error {
-	// O repositório já valida se a task pertence ao usuário na cláusula WHERE
-	return s.repo.Delete(taskID, userID)
+	// userID fica na assinatura para uso futuro em auditoria
+	// (ex: coluna deleted_by). A permissão já foi validada
+	// pelo middleware RequireOwnerOrShared.
+	return s.repo.Delete(taskID)
 }
 
 func (s *Service) UpdateTask(taskID, userID string, req UpdateTaskRequest) (*Task, error) {
-	// 1. Buscar estado atual
-	task, err := s.repo.FindByID(taskID, userID)
+	task, err := s.repo.FindByID(taskID)
 	if err != nil {
 		return nil, err
 	}
@@ -77,7 +78,6 @@ func (s *Service) UpdateTask(taskID, userID string, req UpdateTaskRequest) (*Tas
 		return nil, errors.New("tarefa não encontrada")
 	}
 
-	// 2. Aplicar mudanças
 	if req.Title != nil {
 		task.Title = *req.Title
 	}
@@ -94,24 +94,18 @@ func (s *Service) UpdateTask(taskID, userID string, req UpdateTaskRequest) (*Tas
 		task.DueDate = req.DueDate
 	}
 
-	// 3. Lógica de Sistema Distribuído
 	task.Version++
 
-	// CORREÇÃO DO PANIC: Inicializar o mapa explicitamente antes de usar
 	clockMap := make(map[string]int64)
-
 	if len(task.VectorClock) > 0 {
-		// Ignoramos erro de unmarshal, pois se falhar, usamos o map vazio criado acima
 		_ = json.Unmarshal(task.VectorClock, &clockMap)
 	}
-
-	clockMap[userID]++ // Agora é seguro, pois o map nunca é nil
+	clockMap[userID]++ // userID = quem está editando agora (owner ou colaborador via ACL)
 
 	newClock, _ := json.Marshal(clockMap)
 	task.VectorClock = newClock
 
-	// 4. Salvar
-	if err := s.repo.Update(*task); err != nil {
+	if err := s.repo.Update(*task, userID); err != nil {
 		return nil, err
 	}
 

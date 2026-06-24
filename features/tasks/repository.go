@@ -147,16 +147,17 @@ func (r *Repository) ListTasks(userID string) ([]Task, error) {
 	return tasks, nil
 }
 
-// Delete realiza um Soft Delete (marca deleted_at)
-// Exige ownerID para garantir que ninguém delete a tarefa dos outros
-func (r *Repository) Delete(taskID, userID string) error {
+// Delete realiza um Soft Delete (marca deleted_at).
+// A permissão (owner ou ACL com PermissionDelete) já foi validada
+// pelo middleware RequireOwnerOrShared antes de chegar aqui.
+func (r *Repository) Delete(taskID string) error {
 	query := `
 		UPDATE tasks 
 		SET deleted_at = CURRENT_TIMESTAMP 
-		WHERE id = $1 AND owner_id = $2 AND deleted_at IS NULL
+		WHERE id = $1 AND deleted_at IS NULL
 	`
 
-	result, err := r.db.Exec(query, taskID, userID)
+	result, err := r.db.Exec(query, taskID)
 	if err != nil {
 		return fmt.Errorf("erro ao deletar task: %w", err)
 	}
@@ -167,25 +168,27 @@ func (r *Repository) Delete(taskID, userID string) error {
 	}
 
 	if rows == 0 {
-		return fmt.Errorf("tarefa não encontrada ou permissão negada")
+		return fmt.Errorf("tarefa não encontrada")
 	}
 
 	return nil
 }
 
-// FindByID busca uma tarefa específica (para validar antes do update)
-func (r *Repository) FindByID(taskID, userID string) (*Task, error) {
+// FindByID busca uma tarefa pelo ID, independente de quem é o owner.
+// A validação de permissão (owner ou ACL) já é feita no middleware
+// RequireOwnerOrShared antes da requisição chegar até aqui.
+func (r *Repository) FindByID(taskID string) (*Task, error) {
 	query := `
 		SELECT id, title, description, priority, status, owner_id, 
 			   version, vector_clock, created_at, updated_at, due_date
 		FROM tasks 
-		WHERE id = $1 AND owner_id = $2 AND deleted_at IS NULL
+		WHERE id = $1 AND deleted_at IS NULL
 	`
 	var t Task
 	var vectorClockBytes []byte
 	var dueDate sql.NullTime
 
-	err := r.db.QueryRow(query, taskID, userID).Scan(
+	err := r.db.QueryRow(query, taskID).Scan(
 		&t.ID, &t.Title, &t.Description, &t.Priority, &t.Status, &t.OwnerID,
 		&t.Version, &vectorClockBytes, &t.CreatedAt, &t.UpdatedAt, &dueDate,
 	)
@@ -205,8 +208,10 @@ func (r *Repository) FindByID(taskID, userID string) (*Task, error) {
 	return &t, nil
 }
 
-// Update atualiza a tarefa e insere o evento de mudança
-func (r *Repository) Update(task Task) error {
+// Update atualiza a tarefa e registra o evento de mudança.
+// actorID é quem efetivamente editou — pode ser diferente do owner
+// quando a tarefa foi compartilhada com permissão de escrita via ACL.
+func (r *Repository) Update(task Task, actorID string) error {
 	tx, err := r.db.Begin()
 	if err != nil {
 		return err
@@ -218,20 +223,18 @@ func (r *Repository) Update(task Task) error {
 		UPDATE tasks 
 		SET title = $1, description = $2, priority = $3, status = $4, 
 			due_date = $5, version = $6, vector_clock = $7, updated_at = CURRENT_TIMESTAMP
-		WHERE id = $8 AND owner_id = $9
+		WHERE id = $8
 	`
 
 	_, err = tx.Exec(query,
 		task.Title, task.Description, task.Priority, task.Status,
 		task.DueDate, task.Version, []byte(task.VectorClock),
-		task.ID, task.OwnerID,
+		task.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("erro ao atualizar task: %w", err)
 	}
 
-	// 2. Registrar Evento (TaskUpdated)
-	// Em um sistema real, o payload conteria apenas o "diff" (o que mudou)
 	eventPayload := fmt.Sprintf(`{"status": "%s", "version": %d}`, task.Status, task.Version)
 
 	eventQuery := `
@@ -239,7 +242,7 @@ func (r *Repository) Update(task Task) error {
 		VALUES ($1, 'TaskUpdated', $2, $3, $4, $5, (SELECT COALESCE(MAX(sequence_number), 0) + 1 FROM task_events))
 	`
 	_, err = tx.Exec(eventQuery,
-		task.ID, eventPayload, task.Version, []byte(task.VectorClock), task.OwnerID,
+		task.ID, eventPayload, task.Version, []byte(task.VectorClock), actorID,
 	)
 	if err != nil {
 		return fmt.Errorf("erro ao registrar evento de update: %w", err)
