@@ -60,12 +60,14 @@ func (r *Repository) GrantACL(acl ACL) error {
 // GetACL busca ACLs de um recurso
 func (r *Repository) GetACL(resourceID string, resourceType pkgacl.ResourceType) ([]ACL, error) {
 	query := `
-		SELECT id, resource_id, resource_type, grantee_type, grantee_id, 
-		       permissions, granted_by, granted_at, expires_at
-		FROM acls
-		WHERE resource_id = $1 AND resource_type = $2
-		  AND (expires_at IS NULL OR expires_at > NOW())
-		ORDER BY granted_at DESC
+		SELECT a.id, a.resource_id, a.resource_type, a.grantee_type, a.grantee_id, 
+		       a.permissions, a.granted_by, a.granted_at, a.expires_at,
+		       u.name, u.email
+		FROM acls a
+		LEFT JOIN users u ON a.grantee_id = u.id AND a.grantee_type = 'USER'
+		WHERE a.resource_id = $1 AND a.resource_type = $2
+		  AND (a.expires_at IS NULL OR a.expires_at > NOW())
+		ORDER BY a.granted_at DESC
 	`
 
 	rows, err := r.db.Query(query, resourceID, resourceType)
