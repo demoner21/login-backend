@@ -206,3 +206,21 @@ func (s *Service) GrantTaskAccess(grantedBy, resourceID, granteeUserID string, p
 	}
 	return s.repo.GrantACL(acl)
 }
+
+// ListCollaboratorIDs retorna os IDs de usuários (GranteeType USER) com
+// ACL ativa sobre o recurso. Não inclui o owner — quem chama já conhece
+// o owner pelo próprio recurso (acl não tem acesso à tabela de tasks).
+func (s *Service) ListCollaboratorIDs(resourceID string, resourceType pkgacl.ResourceType) ([]string, error) {
+	acls, err := s.repo.GetACL(resourceID, resourceType)
+	if err != nil {
+		return nil, err
+	}
+
+	var ids []string
+	for _, a := range acls {
+		if a.GranteeType == pkgacl.GranteeUser && a.GranteeID != nil {
+			ids = append(ids, *a.GranteeID)
+		}
+	}
+	return ids, nil
+}

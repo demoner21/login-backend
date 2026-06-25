@@ -265,7 +265,6 @@ func (h *Handler) DeleteTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Pega o ID da URL usando Chi
 	taskID := chi.URLParam(r, "id")
 	if taskID == "" {
 		w.WriteHeader(http.StatusBadRequest)
@@ -273,25 +272,30 @@ func (h *Handler) DeleteTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Chama o serviço
-	err := h.service.DeleteTask(taskID, claims.UserID)
-	if err != nil {
-		// Se não encontrou ou não é dono, tratamos como erro genérico ou 404
-		// Para simplificar, retornamos 404/403 mascarado ou 500
+	// Resolve destinatários ANTES do soft delete — depois disso a
+	// task não é mais encontrada pelas buscas normais (deleted_at).
+	ownerID, ownerErr := h.service.GetTaskOwner(taskID)
+	var recipients []string
+	if ownerErr == nil {
+		recipients, _ = h.service.ListRecipients(ownerID, claims.UserID, taskID)
+	}
+
+	if err := h.service.DeleteTask(taskID, claims.UserID); err != nil {
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest) // Ou NotFound dependendo da lógica exata do erro
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(httpresponse.Response{Error: err.Error()})
 		return
 	}
 
-	// Opcional: Notificar via WebSocket que a tarefa foi removida
-	msg := &ws.Message{
-		Type:      "task_deleted",
-		TaskID:    taskID,
-		UserID:    claims.UserID,
-		Timestamp: time.Now().Format(time.RFC3339),
+	now := time.Now().Format(time.RFC3339)
+	for _, recipientID := range recipients {
+		h.hub.Broadcast <- &ws.Message{
+			Type:      "task_deleted",
+			TaskID:    taskID,
+			UserID:    recipientID,
+			Timestamp: now,
+		}
 	}
-	h.hub.Broadcast <- msg
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(httpresponse.Response{Message: "Tarefa removida com sucesso"})
@@ -331,7 +335,6 @@ func (h *Handler) UpdateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validação
 	if err := h.validate.Struct(req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(httpresponse.Response{Error: err.Error()})
@@ -345,15 +348,25 @@ func (h *Handler) UpdateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Broadcast Websocket
-	msg := &ws.Message{
-		Type:      "task_updated",
-		TaskID:    updatedTask.ID,
-		Payload:   json.RawMessage(`{"status":"` + updatedTask.Status + `", "version":` + strconv.FormatInt(updatedTask.Version, 10) + `}`),
-		UserID:    claims.UserID,
-		Timestamp: time.Now().Format(time.RFC3339),
+	now := time.Now().Format(time.RFC3339)
+	payload := json.RawMessage(`{"status":"` + updatedTask.Status + `", "version":` + strconv.FormatInt(updatedTask.Version, 10) + `}`)
+
+	recipients, err := h.service.ListRecipients(updatedTask.OwnerID, claims.UserID, taskID)
+	if err != nil {
+		// Notificação é best-effort — uma falha aqui não deve
+		// reverter a atualização, que já foi persistida com sucesso.
+		recipients = nil
 	}
-	h.hub.Broadcast <- msg
+
+	for _, recipientID := range recipients {
+		h.hub.Broadcast <- &ws.Message{
+			Type:      "task_updated",
+			TaskID:    updatedTask.ID,
+			Payload:   payload,
+			UserID:    recipientID,
+			Timestamp: now,
+		}
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(httpresponse.Response{

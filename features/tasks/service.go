@@ -15,10 +15,12 @@ type UserResolver interface {
 	FindIDByEmail(email string) (userID string, found bool, err error)
 }
 
-// ACLGranter é o necessário de 'acl' para conceder acesso direto,
-// sem que tasks precise conhecer GrantACLRequest ou regras de share.
+// ACLGranter é o necessário de 'acl' para conceder acesso e descobrir
+// quem tem acesso a um recurso — usado tanto no compartilhamento
+// quanto na notificação em tempo real de mudanças.
 type ACLGranter interface {
 	GrantTaskAccess(grantedBy, resourceID, granteeUserID string, permissions pkgacl.Permission) error
+	ListCollaboratorIDs(resourceID string, resourceType pkgacl.ResourceType) ([]string, error)
 }
 
 type Service struct {
@@ -207,4 +209,46 @@ func (s *Service) ProcessSync(userID string, req SyncRequest) (*SyncResponse, er
 		SyncedCount: count,
 		NewTasks:    newTasks,
 	}, nil
+}
+
+// GetTaskOwner retorna o owner_id de uma task. Usado pelo handler para
+// montar a lista de notificação antes de operações destrutivas (delete),
+// já que após o soft delete a busca normal não encontra mais a task.
+func (s *Service) GetTaskOwner(taskID string) (string, error) {
+	task, err := s.repo.FindByID(taskID)
+	if err != nil {
+		return "", err
+	}
+	if task == nil {
+		return "", errors.New("tarefa não encontrada")
+	}
+	return task.OwnerID, nil
+}
+
+// ListRecipients monta a lista de quem deve ser notificado sobre uma
+// mudança nesta task: o owner + todos os colaboradores com ACL ativa,
+// excluindo o próprio autor da ação (que já sabe o que fez).
+//
+// Resolvido aqui, uma vez, no momento da mutação — não dentro do Hub,
+// que deve permanecer um roteador em memória sem acesso a banco.
+func (s *Service) ListRecipients(ownerID, actorID, taskID string) ([]string, error) {
+	collaborators, err := s.aclGranter.ListCollaboratorIDs(taskID, pkgacl.ResourceTask)
+	if err != nil {
+		return nil, err
+	}
+
+	seen := map[string]bool{actorID: true}
+	var recipients []string
+
+	if !seen[ownerID] {
+		recipients = append(recipients, ownerID)
+		seen[ownerID] = true
+	}
+	for _, id := range collaborators {
+		if !seen[id] {
+			recipients = append(recipients, id)
+			seen[id] = true
+		}
+	}
+	return recipients, nil
 }
